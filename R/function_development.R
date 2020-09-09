@@ -1,3 +1,56 @@
+data("GSE37250") #load Tubercolosis dataset
+data("annotation_libraries")
+GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
+xnnet = build_xnnet(X_train = GSE37250_split$X_train, y_train = GSE37250_split$y_train,
+                    annotation_libraries = annotation_libraries,
+                    n_input_nodes = 4, n_hidden_nodes = 4)
+pred = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
+
+p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
+
+
+
+# X = X[, row.names(xnnet$BioCarta_2016$xnnet_binary_matrix)]
+#
+#
+# augmented_data = augment_data(X, y, 10)
+# pr = prcomp(augmented_data$augmented_X, center = T, scale. = T)
+# pca_df = data.frame(pc1 = pr$x[, 1], pc2 = pr$x[, 2], col = augmented_data$augmented_y)
+# ggplot(pca_df, aes(x = pc1, y = pc2, col = factor(col))) + geom_point()
+#
+# augment_data = function(X, y, multiply = 2){
+#
+#   if (multiply == 0) return(list(augmented_X = X, augmented_y = y))
+#
+#   samples_0 = sum(y == 0)
+#   fit_0 = fMultivar::mvFit(X[which(y == 0), ], method = 'st')
+#   synthetic_data_0 = fMultivar::rmvst(samples_0*multiply,
+#                                     dim = ncol(X),
+#                                     mu = as.numeric(fit_0@fit$estimated$beta),
+#                                     Omega = fit_0@fit$estimated$Omega,
+#                                     alpha = as.numeric(fit_0@fit$estimated$alpha))
+#
+#   samples_1 = sum(y == 1)
+#   fit_1 = fMultivar::mvFit(X[which(y == 1), ], method = 'st')
+#   synthetic_data_1 = fMultivar::rmvst(samples_1*multiply,
+#                                       dim = ncol(X),
+#                                       mu = as.numeric(fit_1@fit$estimated$beta),
+#                                       Omega = fit_1@fit$estimated$Omega,
+#                                       alpha = as.numeric(fit_1@fit$estimated$alpha))
+#
+#   synthetic_data = rbind(synthetic_data_0, synthetic_data_1)
+#   colnames(synthetic_data) = colnames(X)
+#
+#   augmented_X =rbind(X, synthetic_data)
+#   augmented_y = c(y, rep(0, samples_0*multiply), rep(1, samples_1*multiply))
+#
+#   return(list(augmented_X = augmented_X, augmented_y = augmented_y))
+#
+#   }
+
+
+
+
 # X = GSE37250_split$X_test
 # y = GSE37250_split$y_test
 #

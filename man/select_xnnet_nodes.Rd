@@ -7,8 +7,8 @@
 select_xnnet_nodes(
   reduced_GSEA_results,
   limma_results,
-  n_input_nodes = 5,
-  n_hidden_nodes = 4
+  n_input_nodes,
+  n_hidden_nodes
 )
 }
 \arguments{

@@ -120,7 +120,7 @@ get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
   limma_results$pi_val = -log10(limma_results$P.Val)*limma_results$logFC
 
   #sort by pi-values
-  limma_results = limma_results %>% dplyr::arrange(desc(abs(pi_val)))
+  limma_results = limma_results %>% dplyr::arrange(desc(abs(.data$pi_val)))
   n_degs = sum(limma_results$adj.P.Val < adj_pval_cutoff)
   if (n_degs == 0){
     #warning("no significant genes found at adj pval < 0.05")
@@ -160,9 +160,6 @@ get_GSEA_results = function(limma_results,
   annotated_genes = unique(unlist(annotation_library))
   overlap = length(intersect(measured_genes, annotated_genes))
 
-  #testthat::expect_true(overlap > 100, info = 'less than 100 measured genes annotated in annotation library')
-
-  #print(paste('#######', overlap, 'out of ', length(measured_genes), 'measured genes are annotated in annotation library', '#######'))
   switch(rank_metric,
          logFC = {ranks = limma_results$logFC},
          pval = {ranks = limma_results$P.Value},
@@ -179,12 +176,13 @@ get_GSEA_results = function(limma_results,
   )
 
   n_significant_gene_sets = sum(GSEA_results$padj < 0.1)
+
   #print(paste('#######', n_significant_gene_sets, 'significance gene sets detected at adj pval < 0.1', '#######'))
   #if (n_significant_gene_sets == 0)
-  #  warning(paste('#######', "no significant genes found at adj pval < 0.1"), '#######')
+  # warning(paste('#######', "no significant genes found at adj pval < 0.1"), '#######')
 
   #print(paste('####### retaining top', top_n_gene_sets, 'gene sets for downstream analysis #######'))
-  GSEA_results = GSEA_results %>%  arrange(desc(abs(NES))) %>% dplyr::slice(1:top_n_gene_sets)
+  GSEA_results = GSEA_results %>%  arrange(desc(abs(.data$NES))) %>% dplyr::slice(1:top_n_gene_sets)
 
   return(GSEA_results)
 
@@ -203,8 +201,8 @@ renormalize_NES = function(GSEA_results){
   model = lm(abs(NES) ~ log10(size) + .id, data = all_GSEA_results)
   all_GSEA_results$renormalized_NES = abs(all_GSEA_results$NES) - model$fitted.values
 
-  all_GSEA_results = all_GSEA_results %>% dplyr::filter(renormalized_NES > 0) %>%
-    dplyr::arrange(desc(renormalized_NES))
+  all_GSEA_results = all_GSEA_results %>% dplyr::filter(.data$renormalized_NES > 0) %>%
+    dplyr::arrange(desc(.data$renormalized_NES))
 
   GSEA_results = split(all_GSEA_results, all_GSEA_results$.id)
 
@@ -247,6 +245,7 @@ build_single_xnnet = function(X_train,
   xnnet_binary_matrix = create_xnnet_binary_matrix(annotation_library = annotation_libraries[[unique(GSEA_results$.id)]],
                                                    selected_xnnet_nodes = selected_xnnet_nodes)
   xnnet_binary_matrix = extend_with_unassigned_inputs(xnnet_binary_matrix, limma_results = limma_results, n_unassigned = n_unassigned)
+
 
   nnetFit_output = cross_validate_xnnet(
     X_train,
@@ -381,7 +380,7 @@ reduce_GSEA_results = function(GSEA_results, topN = 10, nThreads = 1) {
   s.hat <- length(covered.genes) / length(all.genes)
   #cat("End weighted set cover...\n")
 
-  reduced_GSEA_results = GSEA_results %>% dplyr::filter(pathway %in% cur.res)
+  reduced_GSEA_results = GSEA_results %>% dplyr::filter(.data$pathway %in% cur.res)
   return(reduced_GSEA_results)
 }
 
@@ -417,14 +416,14 @@ marginalGain <- function(cur.set.name, cur.res, idsInSet, costs) {
 #' @param n_input_nodes number of input nodes (default = 5)
 #' @param n_hidden_nodes number of input nodes (default = 4)
 select_xnnet_nodes = function(reduced_GSEA_results, limma_results,
-                              n_input_nodes = 5, n_hidden_nodes = 4){
+                              n_input_nodes, n_hidden_nodes){
 
   hidden_nodes = reduced_GSEA_results$pathway[1:n_hidden_nodes]
 
-  reduced_GSEA_results = reduced_GSEA_results %>% filter(pathway %in% hidden_nodes)
+  reduced_GSEA_results = reduced_GSEA_results %>% filter(.data$pathway %in% hidden_nodes)
   input_nodes = sapply(reduced_GSEA_results$leadingEdge,
                        function(x) limma_results[x, ] %>%
-                         arrange(desc(pi_val)) %>%
+                         arrange(desc(.data$pi_val)) %>%
                          slice(1:min(length(x), n_input_nodes)) %>%
                          row.names)
 
@@ -530,12 +529,16 @@ initialize_weights = function(mask){
 cross_validate_xnnet = function(X_train,
                                 y_train,
                                 xnnet_binary_matrix,
-                                number = 10,
+                                number = 20,
                                 min_decay = 0.1,
                                 max_decay = 1) {
   #finds the best model through repeated k-fold cross-validation
   #with optimization of the decay (regularization) parameter
   X_train = X_train[, row.names(xnnet_binary_matrix)]
+
+  augmented_data = augment_data(X_train, y_train, multiply = 5)
+  X_train = augmented_data$augmented_X
+  y_train = augmented_data$augmented_y
   y_train = factor(ifelse(y_train == 1, 'positive', 'negative'))
 
   #grid to optimize decay parameter
@@ -585,6 +588,35 @@ cross_validate_xnnet = function(X_train,
 
 }
 
+augment_data = function(X, y, multiply = 2){
+
+  if (multiply == 0) return(list(augmented_X = X, augmented_y = y))
+
+  samples_0 = sum(y == 0)
+  fit_0 = fMultivar::mvFit(X[which(y == 0), ], method = 'st')
+  synthetic_data_0 = fMultivar::rmvst(samples_0*multiply,
+                                      dim = ncol(X),
+                                      mu = as.numeric(fit_0@fit$estimated$beta),
+                                      Omega = fit_0@fit$estimated$Omega,
+                                      alpha = as.numeric(fit_0@fit$estimated$alpha))
+
+  samples_1 = sum(y == 1)
+  fit_1 = fMultivar::mvFit(X[which(y == 1), ], method = 'st')
+  synthetic_data_1 = fMultivar::rmvst(samples_1*multiply,
+                                      dim = ncol(X),
+                                      mu = as.numeric(fit_1@fit$estimated$beta),
+                                      Omega = fit_1@fit$estimated$Omega,
+                                      alpha = as.numeric(fit_1@fit$estimated$alpha))
+
+  synthetic_data = rbind(synthetic_data_0, synthetic_data_1)
+  colnames(synthetic_data) = colnames(X)
+
+  augmented_X =rbind(X, synthetic_data)
+  augmented_y = c(y, rep(0, samples_0*multiply), rep(1, samples_1*multiply))
+
+  return(list(augmented_X = augmented_X, augmented_y = augmented_y))
+
+}
 
 #' Building xnnet
 #'
@@ -792,8 +824,8 @@ plot_xnnet_input_genes = function(xnnet, hidden_node) {
 
   hidden_node_colors = RColorBrewer::brewer.pal(ncol(xnnet$xnnet_binary_matrix), 'Set3')
 
-  p = ggplot(X_gene_subset, aes(x = class, y = value)) + geom_boxplot(outlier.shape = NA) + geom_jitter(alpha = 0.3) +
-    facet_wrap( ~ variable, scales = 'free') + theme_Publication() + ylab('normalized expression') + xlab('') +
+  p = ggplot(X_gene_subset, aes(x = .data$class, y = .data$value)) + geom_boxplot(outlier.shape = NA) + geom_jitter(alpha = 0.3) +
+    facet_wrap( ~ .data$variable, scales = 'free') + theme_Publication() + ylab('normalized expression') + xlab('') +
     ggtitle(title) + theme(strip.background = element_rect(fill = hidden_node_colors[hidden_node]))
 
   return(p)
@@ -805,41 +837,52 @@ plot_xnnet_input_genes = function(xnnet, hidden_node) {
 #' @param xnnet xxnet object return by the function build_xnnet
 #' @param X_test test data
 #' @export
-xnnet_predict = function(xnnet, X_test) {
 
-  z_threshold = 3
-  xnnet_input_nodes = colnames(xnnet$nnetFit$trainingData)
-  #removing outcome
-  xnnet_input_nodes = xnnet_input_nodes[-length(xnnet_input_nodes)]
-
-  #in case the test is a one-D vector
-  is_one_dimensional = is.null(dim(X_test))
-
-  if (is_one_dimensional){
-    X_test = data.frame(rbind(X_test, X_test), row.names = NULL)
-  }
-
-  colnames(X_test) = make.names(colnames(X_test), unique = T)
-  X_test = X_test[, xnnet_input_nodes]
-  X_test = scale(X_test, center = T)
-  #X_test = scale(X_test, center = xnnet$X_train_center, scale = xnnet$X_train_center)
-
-  #threshold to handle potential outliers (treshold is the same as in training set)
-  X_test[X_test > z_threshold] = z_threshold
-  X_test[X_test < -z_threshold] = -z_threshold
-
-  xnnet_predictions_probs = predict(xnnet$nnetFit$finalModel, X_test)
-  #xnnet_predictions_binary = ifelse(xnnet_predictions_probs > xnnet$optimal_cutoff[1], 1, 0)
-
-  if (is_one_dimensional){
-
-    xnnet_predictions_probs = xnnet_predictions_probs[1, ]
-  }
-
-  return(as.vector(unlist(xnnet_predictions_probs)))
-
+threshold_scaled_data = function(scaled_data, z_threshold){
+  scaled_data[scaled_data > z_threshold] = z_threshold
+  scaled_data[scaled_data < -z_threshold] = -z_threshold
+  return(scaled_data)
 }
 
+preprocess_X_test = function(xnnet_single, X_test, z_threshold){
+
+  xnnet_input_nodes = colnames(xnnet_single$nnetFit$trainingData)
+  xnnet_input_nodes = xnnet_input_nodes[-length(xnnet_input_nodes)]
+
+  if (is.null(dim(X_test))){
+
+    X_test = data.frame(rbind(X_test, X_test), row.names = NULL)
+    X_test = X_test[, xnnet_input_nodes]
+    X_test = scale(X_test, center = xnnet_single$X_train_center,
+                   scale = xnnet_single$X_train_scale)
+    X_test = threshold_scaled_data(X_test, z_threshold) %>% data.frame
+    X_test$is_single = T
+
+    } else {
+
+      X_test = X_test[, xnnet_input_nodes]
+      X_test = scale(X_test, center = xnnet_single$X_train_center,
+                     scale = xnnet_single$X_train_scale)
+      X_test = threshold_scaled_data(X_test, z_threshold) %>% data.frame
+      X_test$is_single = F
+    }
+
+  return(X_test)
+  }
+
+xnnet_predict_single = function(xnnet_single, X_test, z_threshold) {
+
+  preprocessed_X_test = preprocess_X_test(xnnet_single, X_test, z_threshold)
+  xnnet_predictions_probs = caret::predict.train(xnnet_single$nnetFit, preprocessed_X_test, type = 'prob')[, 'positive']
+  if(preprocessed_X_test$is_single[1] == T) xnnet_predictions_probs = xnnet_predictions_probs[1]
+
+  return(xnnet_predictions_probs)
+}
+
+xnnet_predict = function(xnnet, X_test, z_threshold = 3){
+  xnnet_predictions = lapply(xnnet, function(x) xnnet_predict_single(x, X_test, z_threshold = z_threshold))
+  return(xnnet_predictions)
+}
 
 #' Assessing performance of xnnet predictions given labels
 #'
