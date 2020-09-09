@@ -3,30 +3,21 @@
 \docType{data}
 \name{GSE37250}
 \alias{GSE37250}
-\title{Expression data of tubercolosis patients Vs control patients}
+\title{Transcriptomics data from active vs latent tuberculosis patients}
 \format{
-A data frame with 53940 rows and 10 variables
+Sample of a GEO dataset containing labeled transcriptional profiles from active and latent tuberculosis patients
 \describe{
-\item{price}{price in US dollars (\$326--\$18,823)}
-\item{carat}{weight of the diamond (0.2--5.01)}
-\item{cut}{quality of the cut (Fair, Good, Very Good, Premium, Ideal)}
-\item{color}{diamond colour, from D (best) to J (worst)}
-\item{clarity}{a measurement of how clear the diamond is (I1 (worst), SI2,
-SI1, VS2, VS1, VVS2, VVS1, IF (best))}
-\item{x}{length in mm (0--10.74)}
-\item{y}{width in mm (0--58.9)}
-\item{z}{depth in mm (0--31.8)}
-\item{depth}{total depth percentage = z / mean(x, y) = 2 * z / (x + y) (43--79)}
-\item{table}{width of top of diamond relative to widest point (43--95)}
+\item{X}{expression matrix with 50 samples (rows) and 31426 probes (columns)}
+\item{y}{a vector of binary labels for each sample: 0 = latent tuberculosis, 1 = active tuberculosis}
 }
 }
 \source{
-\url{http://www.diamondse.info/}
+\url{https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE37250}
 }
 \usage{
 GSE37250
 }
 \description{
-Expression data of tubercolosis patients Vs control patients
+Transcriptomics data from active vs latent tuberculosis patients
 }
 \keyword{datasets}

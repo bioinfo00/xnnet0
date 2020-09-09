@@ -76,8 +76,8 @@ plot_xnnet(xnnet$Reactome_2016)
 
 ``` r
 # library(ggradar)
-#  
-# sample_activation = compute_hidden_activation(xnnet$Reactome_2016, X = GSE37250_split$X_train, y = GSE37250_split$y_train)
+# 
+# sample_activation = compute_activation(xnnet$Reactome_2016, X = GSE37250_split$X_train, y = GSE37250_split$y_train)
 # 
 # mean_hidden_activation = sample_activation %>%
 #   dplyr::select(-sample) %>% dplyr::group_by(class) %>%

@@ -14,7 +14,7 @@ LazyData: true
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
 Depends: 
-    dplyr, ggplot2, testthat
+    R (>= 2.10), dplyr, ggplot2, testthat
 Suggests: 
     knitr,
     rmarkdown
@@ -34,6 +34,8 @@ Imports:
     ggthemes,
     ggrepel,
     grid,
-    reshape
+    reshape,
+    fMultivar, 
+    spatial
 URL: https://github.com/bioinfo00/xnnet0
 BugReports: https://github.com/bioinfo00/xnnet0/issues

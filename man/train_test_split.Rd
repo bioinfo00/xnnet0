@@ -7,11 +7,13 @@
 train_test_split(X, y, training_fraction = 0.7, rnd_seed = 666)
 }
 \arguments{
-\item{X}{data matrix}
+\item{X}{transcriptomics data with samples as rows and genes as features}
 
-\item{y}{binary labels}
+\item{y}{binary label for each sample in X}
 
 \item{training_fraction}{fraction of data for training}
+
+\item{rnd_seed}{random seed for reproducible results}
 }
 \value{
 A list containing \code{(X_train, y_train, X_test, y_test)}.

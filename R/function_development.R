@@ -1,6 +1,25 @@
 # data("GSE37250") #load Tubercolosis dataset
-# data("annotation_libraries") #load annotation libraries
+# # data("annotation_libraries") #load annotation libraries
+# GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
 #
+# X_train = GSE37250_split$X_train
+# y_train = GSE37250_split$y_train
+# exp_design = factor(ifelse(y_train == 0, 'class_neg', 'class_pos'))
+# exp_design_matrix = model.matrix( ~ 0 + exp_design)
+#
+#
+# exp_design = data.frame(class_neg = ifelse(y_train == 0, 1, 0),
+#                         class_pos = ifelse(y_train == 1, 1, 0))
+# exp_design_matrix = model.matrix( ~ 0 + class_neg + class_pos, exp_design)
+# contrast_matrix = limma::makeContrasts(exp_designclass_pos - exp_designclass_neg,
+#                                        levels = exp_design_matrix)
+#
+# fitTrtMean = limma::lmFit(t(X_train), exp_design_matrix)
+# fit_contrast = limma::contrasts.fit(fitTrtMean, contrast_matrix)
+# efit_contrast = limma::eBayes(fit_contrast)
+
+
+
 # #split data
 # GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
 #

@@ -1,42 +1,22 @@
-#' Expression data of tubercolosis patients Vs control patients
+#' Transcriptomics data from active vs latent tuberculosis patients
 #'
 #'
-#' @format A data frame with 53940 rows and 10 variables
+#' @format Sample of a GEO dataset containing labeled transcriptional profiles from active and latent tuberculosis patients
 #' \describe{
-#'   \item{price}{price in US dollars (\$326--\$18,823)}
-#'   \item{carat}{weight of the diamond (0.2--5.01)}
-#'   \item{cut}{quality of the cut (Fair, Good, Very Good, Premium, Ideal)}
-#'   \item{color}{diamond colour, from D (best) to J (worst)}
-#'   \item{clarity}{a measurement of how clear the diamond is (I1 (worst), SI2,
-#'     SI1, VS2, VS1, VVS2, VVS1, IF (best))}
-#'   \item{x}{length in mm (0--10.74)}
-#'   \item{y}{width in mm (0--58.9)}
-#'   \item{z}{depth in mm (0--31.8)}
-#'   \item{depth}{total depth percentage = z / mean(x, y) = 2 * z / (x + y) (43--79)}
-#'   \item{table}{width of top of diamond relative to widest point (43--95)}
+#'   \item{X}{expression matrix with 50 samples (rows) and 31426 probes (columns)}
+#'   \item{y}{a vector of binary labels for each sample: 0 = latent tuberculosis, 1 = active tuberculosis}
 #' }
-#' @source <http://www.diamondse.info/>
+#' @source <https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE37250>
 "GSE37250"
 
 
 #' Annotation libraries
 #'
-#'
-#' @format A data frame with 53940 rows and 10 variables
-#' \describe{
-#'   \item{price}{price in US dollars (\$326--\$18,823)}
-#'   \item{carat}{weight of the diamond (0.2--5.01)}
-#'   \item{cut}{quality of the cut (Fair, Good, Very Good, Premium, Ideal)}
-#'   \item{color}{diamond colour, from D (best) to J (worst)}
-#'   \item{clarity}{a measurement of how clear the diamond is (I1 (worst), SI2,
-#'     SI1, VS2, VS1, VVS2, VVS1, IF (best))}
-#'   \item{x}{length in mm (0--10.74)}
-#'   \item{y}{width in mm (0--58.9)}
-#'   \item{z}{depth in mm (0--31.8)}
-#'   \item{depth}{total depth percentage = z / mean(x, y) = 2 * z / (x + y) (43--79)}
-#'   \item{table}{width of top of diamond relative to widest point (43--95)}
-#' }
-#' @source <http://www.diamondse.info/>
+#' @format Each element of the list is an annotation library in the form of
+#' a list of gene sets. The annotation libraries are a selection of the ones
+#' provided by Enrichr (see link below).
+
+#' @source <https://maayanlab.cloud/Enrichr/#stats>
 "annotation_libraries"
 
 
@@ -44,9 +24,10 @@
 #'
 #' This function splits a dataset and corresponding
 #' labels into a training and test set
-#' @param X data matrix
-#' @param y binary labels
+#' @param X transcriptomics data with samples as rows and genes as features
+#' @param y binary label for each sample in X
 #' @param training_fraction fraction of data for training
+#' @param rnd_seed random seed for reproducible results
 #' @return A list containing \code{(X_train, y_train, X_test, y_test)}.
 #' @export
 #' @import caret
@@ -94,6 +75,63 @@ train_test_split = function(X,
   ))
 }
 
+
+#' Building xnnet
+#'
+#' This function builds xnnet using a labeled training set of transcriptional profiles,
+#' and a list of annotation libraries
+#' @param X_train data matrix
+#' @param y_train binary labels
+#' @param annotation_libraries a list of annotation libraries. Each library is a list of gene sets
+#' gene sets
+#' @param n_hidden_nodes number of hidden nodes in the network
+#' @param n_input_nodes maximum number of input nodes per hidden nodes
+#' @param n_unassigned number of input genes not assigned to a specific gene set
+#' @param number number of bootstrap samples for network training
+#' @param min_decay minimum value of the decay parameter for regularization
+#' @param max_decay maximum value of the decay parameter for regularization
+#' @return A list containing an xnnet object for each annotation library
+#' @export
+#' @examples
+#' data("GSE37250") #load Tubercolosis dataset
+#' data("annotation_libraries")
+#' GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
+#' xnnet = build_xnnet(X_train = GSE37250_split$X_train, y_train = GSE37250_split$y_train,
+#' annotation_libraries = annotation_libraries)
+build_xnnet = function(X_train, y_train,
+                       annotation_libraries,
+                       n_input_nodes = 3,
+                       n_hidden_nodes = 4,
+                       n_unassigned = 3,
+                       number = 10,
+                       min_decay = 0.1,
+                       max_decay = 1){
+
+  print('step 1 of 3: performing Limma')
+  limma_results = get_limma_results(X_train, y_train)
+  print('done')
+
+  print('step 2 of 3: processing GSEA results')
+  GSEA_results = get_and_process_GSEA_results(annotation_libraries,
+                                              limma_results)
+  print('done')
+
+  print('step 3 of 3: cross-validating neural networks')
+  xnnet = lapply(GSEA_results, function(x) build_single_xnnet(X_train = X_train,
+                                                              y_train = y_train,
+                                                              annotation_libraries, x,
+                                                              limma_results = limma_results,
+                                                              n_input_nodes = n_input_nodes,
+                                                              n_hidden_nodes = n_hidden_nodes,
+                                                              n_unassigned = n_unassigned,
+                                                              number = number,
+                                                              min_decay = min_decay,
+                                                              max_decay = max_decay))
+  print('done')
+
+  return(xnnet)
+}
+
 #' Limma differential analysis
 #'
 #' This function performs differential gene expression with Limma on
@@ -109,7 +147,7 @@ get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
 
   exp_design = factor(ifelse(y_train == 0, 'class_neg', 'class_pos'))
   exp_design_matrix = model.matrix( ~ 0 + exp_design)
-  contrast_matrix = limma::makeContrasts(exp_designclass_pos - exp_designclass_neg,
+  contrast_matrix = limma::makeContrasts(contrasts="exp_designclass_pos - exp_designclass_neg",
                                          levels = exp_design_matrix)
 
   fitTrtMean = limma::lmFit(t(X_train), exp_design_matrix)
@@ -141,6 +179,7 @@ get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
 #' @param annotation_library list of gene sets contained in a given annotation library
 #' @param min_term_size min size of annotation term (default = 10)
 #' @param max_term_size max size of annotation term (default = Inf)
+#' @param rank_metric
 #' @importFrom fgsea fgsea
 #' @importFrom testthat expect_true
 
@@ -189,10 +228,10 @@ get_GSEA_results = function(limma_results,
 }
 
 
-
 #' Renormalize NES produced by GSEA
 #'
 #' @importFrom plyr ldply
+#' @param GSEA_results
 
 renormalize_NES = function(GSEA_results){
 
@@ -210,6 +249,11 @@ renormalize_NES = function(GSEA_results){
 
 }
 
+#' Renormalize NES produced by GSEA
+#'
+#' @importFrom plyr ldply
+#' @param annotation_libraries
+#' @param limma_results
 get_and_process_GSEA_results = function(annotation_libraries,
                                         limma_results){
 
@@ -222,6 +266,8 @@ get_and_process_GSEA_results = function(annotation_libraries,
   return(GSEA_results)
 
 }
+
+
 
 build_single_xnnet = function(X_train,
                               y_train,
@@ -589,6 +635,30 @@ cross_validate_xnnet = function(X_train,
 
 }
 
+compute_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
+
+  colnames(X) = make.names(colnames(X), unique = T)
+  xnnet_input_nodes = xnnet_single$nnetFit$finalModel$coefnames
+  X = X[, xnnet_input_nodes]
+  X = scale(X, center = T)
+
+  #threshold to handle potential outliers (treshold is the same as in training set)
+  X[X > zscore_threshold] = zscore_threshold
+  X[X < -zscore_threshold] = -zscore_threshold
+
+  weights = xnnet_single$nnetFit$finalModel$wts
+  xnnet_binary_matrix = xnnet_single$xnnet_binary_matrix
+
+  mask = xnnet_single$nnetFit$finalModel$param$mask
+  decoded_weights = decode_weights(weights, mask, xnnet_binary_matrix)
+  hidden_activation = data.frame(sigmoid(cbind(1, X) %*% decoded_weights$first_layer))
+  hidden_activation$sample = row.names(X)
+  hidden_activation$class = factor(y)
+
+  return(hidden_activation)
+}
+
+#' @importFrom  fMultivar mvFit
 augment_data = function(X, y, multiply = 2){
 
   if (multiply == 0) return(list(augmented_X = X, augmented_y = y))
@@ -619,218 +689,7 @@ augment_data = function(X, y, multiply = 2){
 
 }
 
-#' Building xnnet
-#'
-#' This function builds xnnet using a labeled training set and a list of annotation libraries
-#' @param X_train data matrix
-#' @param y_train binary labels
-#' @param annotation_libraries a list of annotation libraries. Each library is a list of gene sets
-#' gene sets
-#' @export
-#' @examples
-#' data("GSE37250") #load Tubercolosis dataset
-#' data("annotation_libraries")
-#' GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
-#' xnnet = build_xnnet(X_train = GSE37250_split$X_train, y_train = GSE37250_split$y_train,
-#' annotation_libraries = annotation_libraries)
-build_xnnet = function(X_train, y_train,
-                       annotation_libraries,
-                       n_input_nodes = 3,
-                       n_hidden_nodes = 4,
-                       n_unassigned = 3,
-                       number = 10,
-                       min_decay = 0.1,
-                       max_decay = 1){
 
-print('step 1 of 3: performing Limma')
-limma_results = get_limma_results(X_train, y_train)
-print('done')
-
-print('step 2 of 3: processing GSEA results')
-GSEA_results = get_and_process_GSEA_results(annotation_libraries,
-                                            limma_results)
-print('done')
-
-print('step 3 of 3: cross-validating neural networks')
-xnnet = lapply(GSEA_results, function(x) build_single_xnnet(X_train = X_train,
-                                                            y_train = y_train,
-                                                            annotation_libraries, x,
-                                                            limma_results = limma_results,
-                                                            n_input_nodes = n_input_nodes,
-                                                            n_hidden_nodes = n_hidden_nodes,
-                                                            n_unassigned = n_unassigned,
-                                                            number = number,
-                                                            min_decay = min_decay,
-                                                            max_decay = max_decay))
-print('done')
-
-return(xnnet)
-}
-
-
-
-
-#' Plot xxnet structure
-#'
-#' This function splits a dataset and corresponding
-#' labels into a training and test set
-#' @param xnnet output of build_xnnet
-#' @importFrom scales rescale
-#' @importFrom RColorBrewer brewer.pal
-#' @import lattice
-#' @export
-plot_xnnet = function(xnnet, color = 'gray70') {
-
-  par(mar = c(0, 0, 0, 0))
-  hidden_node_names = names(xnnet$xnnet_binary_matrix)
-  n_hidden_nodes =  length(hidden_node_names)
-  hidden_node_colors = RColorBrewer::brewer.pal(n_hidden_nodes, 'Set3')
-
-  plot_nnet(
-    xnnet$nnetFit$finalModel,
-    nid = T,
-    rel.rsc = 10,
-    alpha.val = 2,
-    circle.cex = 3.0,
-    bias = F,
-    cex.val = 0.7,
-    circle.col = list('white', c(hidden_node_colors, 'white')),
-    y.lab = F,
-    neg.col = color,
-    pos.col = color,
-    hidden_node_names = hidden_node_names
-  )
-
-}
-
-
-#' Plot xxnet results as a heatmap
-#'
-#' This function plots xnnet as a heatmap with genes as rows and samples as columns.
-#' Genes are grouped by the corresponding annotation and rows are grouped by sample class.
-#' labels into a training and test set
-#' @param xnnet output of build_xnnet
-#' @importFrom RColorBrewer brewer.pal
-#' @importFrom heatmaply heatmaply
-#' @importFrom plotly hide_legend
-#' @export
-
-plot_xnnet_heatmap = function(xnnet) {
-
-  z_threshold = 3
-  training_data = xnnet$nnetFit$trainingData
-  label_column = which(names(training_data) == '.outcome')
-  y_train = training_data[, label_column]
-  X_train = training_data[, -label_column]
-
-  reorder_idx = order(y_train)
-  X_train = X_train[reorder_idx,]
-  y_train = y_train[reorder_idx]
-  class = ifelse(y_train == 'positive', '1', '0')
-
-  heatmap_matrix = matrix(nrow = 0, ncol = nrow(X_train))
-  hidden_node_color = c()
-  hidden_node_names = colnames(xnnet$xnnet_binary_matrix)
-  cols = RColorBrewer::brewer.pal(length(hidden_node_names), 'Set3')
-
-  for (hidden_node in 1:length(hidden_node_names)) {
-    genes_in_hidden_node = which(xnnet$xnnet_binary_matrix[, hidden_node] == 1)
-    X_gene_subset = X_train[, genes_in_hidden_node]
-    dm = t(X_gene_subset)
-
-    #floor/ceiling of outliers
-    dm[dm > z_threshold] = z_threshold
-    dm[dm < -z_threshold] = -z_threshold
-
-    heatmap_matrix = rbind(heatmap_matrix, dm)
-    hidden_node_color = c(hidden_node_color, rep(hidden_node_names[hidden_node], nrow(dm)))
-
-  }
-
-  ax = list(
-    type = "category",
-    showgrid = F,
-    showline = F,
-    showticklabels = F,
-    ticks = "",
-    tickangle = 40
-  )
-
-  ay = list(
-    type = "category",
-    showgrid = TRUE,
-    showline = TRUE,
-    showticklabels = TRUE,
-    ticks = "outside",
-    tickangle = 0
-  )
-
-  row.names(heatmap_matrix) = make.names(row.names(heatmap_matrix), unique = T)
-  names(cols) =  hidden_node_names
-
-  p = suppressWarnings(heatmaply::heatmaply(
-    heatmap_matrix,
-    Colv = NA,
-    Rowv = NA,
-    ColSideColors = class,
-    row_side_colors = hidden_node_color,
-    row_side_palette = cols,
-    cellnote_color = 'white',
-    fontsize_row = 9,
-    colors = c("black", 'gray25', "white"),
-    col_side_palette = c("0" = "gray20", "1" = "gray80"),
-    label_column = NA,
-    margins = c(5, 150, 0, 0),
-    revC = T,
-    dendrogram = "none",
-    colorbar_xpos = c(0, 0)
-  )) %>% plotly::hide_legend()
-
-  return(p)
-
-}
-
-
-#' Plot xxnet results as a heatmap
-#'
-#' This function plots xnnet as a heatmap with genes as rows and samples as columns.
-#' Genes are grouped by the corresponding annotation and rows are grouped by sample class.
-#' labels into a training and test set
-#' @param xnnet output of build_xnnet
-#' @param hidden_node hidden node index
-#' @importFrom RColorBrewer brewer.pal
-#' @importFrom reshape melt
-#' @import ggplot2
-#' @export
-
-plot_xnnet_input_genes = function(xnnet, hidden_node) {
-
-  n_hidden_nodes = ncol(xnnet$xnnet_binary_matrix)
-  testthat::expect_true(hidden_node >= 1 & hidden_node < n_hidden_nodes,
-                        info = paste('hidden node should be a number between 1 and', n_hidden_nodes))
-
-  title = colnames(xnnet$xnnet_binary_matrix)[hidden_node]
-  X_train = xnnet$nnetFit$trainingData[, -ncol(xnnet$nnetFit$trainingData)]
-  y_train = xnnet$nnetFit$trainingData[, ncol(xnnet$nnetFit$trainingData)]
-  y_train = factor(ifelse(y_train == 'positive', 1, 0))
-
-  gene_vector_idx = which(xnnet$xnnet_binary_matrix[, hidden_node] == 1)
-  gene_vector = row.names(xnnet$xnnet_binary_matrix)[gene_vector_idx]
-
-  X_gene_subset = data.frame(class = factor(y_train), X_train[, gene_vector])
-  X_gene_subset = reshape::melt(X_gene_subset, id.vars = 'class')
-  X_gene_subset$variable = factor(X_gene_subset$variable,
-                                  levels = sort(unique(X_gene_subset$variable)),
-                                  ordered = T)
-
-  hidden_node_colors = RColorBrewer::brewer.pal(ncol(xnnet$xnnet_binary_matrix), 'Set3')
-
-  p = ggplot(X_gene_subset, aes(x = .data$class, y = .data$value)) + geom_boxplot(outlier.shape = NA) + geom_jitter(alpha = 0.3) +
-    facet_wrap( ~ .data$variable, scales = 'free') + theme_Publication() + ylab('normalized expression') + xlab('') +
-    ggtitle(title) + theme(strip.background = element_rect(fill = hidden_node_colors[hidden_node]))
-
-  return(p)
-}
 
 
 #' Predict sample labels using xnnet
@@ -927,31 +786,6 @@ assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels){
 }
 
 
-
-compute_hidden_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
-
-  colnames(X) = make.names(colnames(X), unique = T)
-  xnnet_input_nodes = xnnet_single$nnetFit$finalModel$coefnames
-  X = X[, xnnet_input_nodes]
-  X = scale(X, center = T)
-
-  #threshold to handle potential outliers (treshold is the same as in training set)
-  X[X > zscore_threshold] = zscore_threshold
-  X[X < -zscore_threshold] = -zscore_threshold
-
-  weights = xnnet_single$nnetFit$finalModel$wts
-  xnnet_binary_matrix = xnnet_single$xnnet_binary_matrix
-
-  mask = xnnet_single$nnetFit$finalModel$param$mask
-  decoded_weights = decode_weights(weights, mask, xnnet_binary_matrix)
-  hidden_activation = data.frame(sigmoid(cbind(1, X) %*% decoded_weights$first_layer))
-  hidden_activation$sample = row.names(X)
-  hidden_activation$class = factor(y)
-
-  return(hidden_activation)
-}
-
-
 sigmoid = function(x) {
   return(1 / (1 + exp(-x)))
 }
@@ -976,622 +810,6 @@ decode_weights = function(W, mask, xnnet_binary_matrix, n_classes = 2) {
               second_layer = W_second_layer))
 }
 
-#' @importFrom scales rescale
-#' @importFrom stringi stri_wrap
-#' @importFrom graphics par plot points segments text
-plot_nnet = function(mod.in,
-                     nid = T,
-                     all.out = T,
-                     all.in = T,
-                     bias = T,
-                     wts.only = F,
-                     rel.rsc = 4,
-                     circle.cex = 5,
-                     node.labs = F,
-                     var.labs = T,
-                     x.lab = NULL,
-                     y.lab = NULL,
-                     line.stag = NULL,
-                     struct = NULL,
-                     cex.val = 1,
-                     alpha.val = 1,
-                     circle.col = 'lightblue',
-                     pos.col = 'black',
-                     neg.col = 'grey',
-                     bord.col = 'black',
-                     hidden_node_names,
-                     ...) {
-  #require(scales)
-  #require(stringi)
-  #sanity checks
-  if ('mlp' %in% class(mod.in))
-    warning('Bias layer not applicable for rsnns object')
-  if ('numeric' %in% class(mod.in)) {
-    if (is.null(struct))
-      stop('Three-element vector required for struct')
-    if (length(mod.in) != ((struct[1] * struct[2] + struct[2] * struct[3]) +
-                           (struct[3] + struct[2])))
-      stop('Incorrect length of weight matrix for given network structure')
-  }
-  if ('train' %in% class(mod.in)) {
-    if ('nnet' %in% class(mod.in$finalModel)) {
-      mod.in = mod.in$finalModel
-      warning('Using best nnet model from train output')
-    }
-    else
-      stop('Only nnet method can be used with train object')
-  }
 
-  #gets weights for neural network, output is list
-  #if rescaled argument is true, weights are returned but rescaled based on abs value
-  nnet.vals = function(mod.in, nid, rel.rsc, struct.out = struct) {
-    #require(scales)
-
-    if ('numeric' %in% class(mod.in)) {
-      struct.out = struct
-      wts = mod.in
-    }
-
-    #neuralnet package
-    if ('nn' %in% class(mod.in)) {
-      struct.out = unlist(lapply(mod.in$weights[[1]], ncol))
-      struct.out = struct.out[-length(struct.out)]
-      struct.out = c(
-        length(mod.in$model.list$variables),
-        struct.out,
-        length(mod.in$model.list$response)
-      )
-      wts = unlist(mod.in$weights[[1]])
-    }
-
-    #nnet package
-    if ('nnet' %in% class(mod.in)) {
-      struct.out = mod.in$n
-      wts = mod.in$wts
-    }
-
-    #RSNNS package
-    if ('mlp' %in% class(mod.in)) {
-      struct.out = c(mod.in$nInputs,
-                     mod.in$archParams$size,
-                     mod.in$nOutputs)
-      hid.num = length(struct.out) - 2
-      wts = mod.in$snnsObject$getCompleteWeightMatrix()
-
-      #get all input-hidden and hidden-hidden wts
-      inps = wts[grep('Input', row.names(wts)), grep('Hidden_2', colnames(wts)), drop =
-                   F]
-      inps = melt(rbind(rep(NA, ncol(inps)), inps))$value
-      uni.hids = paste0('Hidden_', 1 + seq(1, hid.num))
-      for (i in 1:length(uni.hids)) {
-        if (is.na(uni.hids[i + 1]))
-          break
-        tmp = wts[grep(uni.hids[i], rownames(wts)), grep(uni.hids[i + 1], colnames(wts)), drop =
-                    F]
-        inps = c(inps, melt(rbind(rep(
-          NA, ncol(tmp)
-        ), tmp))$value)
-      }
-
-      #get connections from last hidden to output layers
-      outs = wts[grep(paste0('Hidden_', hid.num + 1), row.names(wts)), grep('Output', colnames(wts)), drop =
-                   F]
-      outs = rbind(rep(NA, ncol(outs)), outs)
-
-      #weight vector for all
-      wts = c(inps, melt(outs)$value)
-      assign('bias', F, envir = environment(nnet.vals))
-    }
-
-    if (nid)
-      wts = scales::rescale(abs(wts), c(1, rel.rsc))
-
-    #convert wts to list with appropriate names
-    hid.struct = struct.out[-c(length(struct.out))]
-    row.nms = NULL
-    #print(struct.out)
-    for (i in 1:length(hid.struct)) {
-      if (is.na(hid.struct[i + 1]))
-        break
-      row.nms = c(row.nms, rep(paste('hidden', i, seq(
-        1:hid.struct[i + 1]
-      )), each = 1 + hid.struct[i]))
-    }
-    row.nms = c(row.nms,
-                rep(paste('out', seq(1:struct.out[length(struct.out)])), each = 1 +
-                      struct.out[length(struct.out) - 1]))
-    out.ls = data.frame(wts, row.nms)
-    out.ls$row.nms = factor(row.nms,
-                            levels = unique(row.nms),
-                            labels = unique(row.nms))
-    out.ls = split(out.ls$wts, f = out.ls$row.nms)
-
-    assign('struct', struct.out, envir = environment(nnet.vals))
-
-    out.ls
-
-  }
-
-  wts = nnet.vals(mod.in, nid = F)
-
-  if (wts.only)
-    return(wts)
-
-  #circle colors for input, if desired, must be two-vector list, first vector is for input layer
-  if (is.list(circle.col)) {
-    circle.col.inp = circle.col[[1]]
-    circle.col = circle.col[[2]]
-  }
-  else
-    circle.col.inp = circle.col
-
-  #initiate plotting
-  x.range = c(0, 100)
-  y.range = c(0, 100)
-  #these are all proportions from 0-1
-  if (is.null(line.stag))
-    line.stag = 0.011 * circle.cex / 2
-  layer.x = seq(0.17, 0.9, length = length(struct))
-  bias.x = layer.x[-length(layer.x)] + diff(layer.x) / 2
-  bias.y = 0.95
-  circle.cex = circle.cex
-
-  #get variable names from mod.in object
-  #change to user input if supplied
-  if ('numeric' %in% class(mod.in)) {
-    x.names = paste0(rep('X', struct[1]), seq(1:struct[1]))
-    y.names = paste0(rep('Y', struct[3]), seq(1:struct[3]))
-  }
-  if ('mlp' %in% class(mod.in)) {
-    all.names = mod.in$snnsObject$getUnitDefinitions()
-    x.names = all.names[grep('Input', all.names$unitName), 'unitName']
-    y.names = all.names[grep('Output', all.names$unitName), 'unitName']
-  }
-  if ('nn' %in% class(mod.in)) {
-    x.names = mod.in$model.list$variables
-    y.names = mod.in$model.list$respons
-  }
-  if ('xNames' %in% names(mod.in)) {
-    x.names = mod.in$xNames
-    y.names = attr(terms(mod.in), 'factor')
-    y.names = row.names(y.names)[!row.names(y.names) %in% x.names]
-  }
-  if (!'xNames' %in% names(mod.in) & 'nnet' %in% class(mod.in)) {
-    if (is.null(mod.in$call$formula)) {
-      x.names = colnames(eval(mod.in$call$x))
-      y.names = colnames(eval(mod.in$call$y))
-    }
-    else{
-      forms = eval(mod.in$call$formula)
-      x.names = mod.in$coefnames
-      facts = attr(terms(mod.in), 'factors')
-      y.check = mod.in$fitted
-      if (ncol(y.check) > 1)
-        y.names = colnames(y.check)
-      else
-        y.names = as.character(forms)[2]
-    }
-  }
-  #change variables names to user sub
-  if (!is.null(x.lab)) {
-    if (length(x.names) != length(x.lab))
-      stop('x.lab length not equal to number of input variables')
-    else
-      x.names = x.lab
-  }
-  if (!is.null(y.lab)) {
-    if (length(y.names) != length(y.lab))
-      stop('y.lab length not equal to number of output variables')
-    else
-      y.names = y.lab
-  }
-
-  #initiate plot
-  plot(
-    x.range,
-    y.range,
-    type = 'n',
-    axes = F,
-    ylab = '',
-    xlab = '',
-    ...
-  )
-
-  #function for getting y locations for input, hidden, output layers
-  #input is integer value from 'struct'
-  # get.ys=function(lyr){
-  #   #my flag
-  #   spacing=diff(c(0*diff(y.range),0*diff(y.range)))/max(struct)
-  #   seq(1*(diff(y.range)+spacing*(lyr-1)),0*(diff(y.range)-spacing*(lyr-1)),
-  #       length=lyr)
-  # }
-
-  get.ys = function(lyr, max_space = 20) {
-    if (max_space) {
-      spacing = diff(c(0 * diff(y.range), 0.9 * diff(y.range))) / lyr
-    } else {
-      spacing = diff(c(0 * diff(y.range), 0.9 * diff(y.range))) / max(struct)
-    }
-
-    seq(0.52 * (diff(y.range) + spacing * (lyr - 1)), 0.2 * (diff(y.range) -
-                                                               spacing * (lyr - 1)),
-        length = lyr)
-  }
-
-  #function for plotting nodes
-  #layer specifies which layer, integer from 'struct'
-  #x.loc indicates x location for layer, integer from 'layer.x'
-  #layer.name is string indicating text to put in node
-  layer.points = function(layer, x.loc, layer.name, cex = cex.val) {
-    x = rep(x.loc * diff(x.range), layer)
-    y = get.ys(layer)
-    if (layer.name[1] == 'O')
-      in.col = 'white'
-    points(
-      x,
-      y,
-      pch = 21,
-      cex = circle.cex,
-      col = bord.col,
-      bg = in.col
-    )
-
-    layer.name = gsub('_', ' ', layer.name)
-    layer.name = gsub('\\.', ' ', layer.name)
-    layer.name = gsub("\\s*\\([^\\)]+\\)", "", as.character(layer.name))
-    layer.name = toupper(layer.name)
-
-    hidden_text = sapply(layer.name, function(x)
-       paste(stringi::stri_wrap(x, 40, 0.0), collapse = '\n'))
-
-    hidden_text[hidden_text == 'I'] = ''
-    hidden_text[hidden_text == 'O'] = ''
-
-    text(x, y + 4.5, hidden_text, cex = cex.val + 0.2)
-    #if (hidden_text[hidden_text == 'O']) text(x,y,hidden_text, cex = cex.val + 0.2)
-
-    if (layer.name[1] == 'I' &
-        var.labs)
-      text(x - line.stag * diff(x.range),
-           y,
-           x.names,
-           pos = 2,
-           cex = cex.val + 0.1)
-    if (layer.name[1] == 'O' &
-        var.labs)
-      text(x + line.stag * diff(x.range),
-           y,
-           '',
-           pos = 4,
-           cex = cex.val + 0.1)
-  }
-
-  #function for plotting bias points
-  #bias.x is vector of values for x locations
-  #bias.y is vector for y location
-  #layer.name is  string indicating text to put in node
-  bias.points = function(bias.x, bias.y, layer.name, cex, ...) {
-    for (val in 1:length(bias.x)) {
-      points(
-        diff(x.range) * bias.x[val],
-        bias.y * diff(y.range),
-        pch = 21,
-        col = bord.col,
-        bg = in.col,
-        cex = circle.cex
-      )
-      if (node.labs)
-        text(diff(x.range) * bias.x[val],
-             bias.y * diff(y.range),
-             '',
-             cex = cex.val)
-    }
-  }
-
-  #function creates lines colored by direction and width as proportion of magnitude
-  #use all.in argument if you want to plot connection lines for only a single input node
-  layer.lines = function(mod.in,
-                         h.layer,
-                         layer1 = 1,
-                         layer2 = 2,
-                         out.layer = F,
-                         nid,
-                         rel.rsc,
-                         all.in,
-                         pos.col,
-                         neg.col,
-                         ...) {
-    x0 = rep(layer.x[layer1] * diff(x.range) + line.stag * diff(x.range), struct[layer1])
-    x1 = rep(layer.x[layer2] * diff(x.range) - line.stag * diff(x.range), struct[layer1])
-
-    if (out.layer == T) {
-      y0 = get.ys(struct[layer1])
-      y1 = rep(get.ys(struct[layer2])[h.layer], struct[layer1])
-      src.str = paste('out', h.layer)
-
-      wts = nnet.vals(mod.in, nid = F, rel.rsc)
-      wts = wts[grep(src.str, names(wts))][[1]][-1]
-      wts.rs = nnet.vals(mod.in, nid = T, rel.rsc)
-      wts.rs = wts.rs[grep(src.str, names(wts.rs))][[1]][-1]
-
-      cols = rep(pos.col, struct[layer1])
-      cols[wts < 0] = neg.col
-      cols[wts == 0] = 'neg.col'
-
-      #my flag
-      #lwd = 0
-      #lwd[wts.rs > 1] = wts.rs[wts.rs > 1]
-      if (nid)
-        segments(x0, y0, x1, y1, col = cols, lwd = wts.rs)
-
-      else
-        segments(x0, y0, x1, y1)
-
-    }
-
-    else{
-      if (is.logical(all.in))
-        all.in = h.layer
-      else
-        all.in = which(x.names == all.in)
-
-      y0 = rep(get.ys(struct[layer1])[all.in], struct[2])
-      y1 = get.ys(struct[layer2])
-      src.str = paste('hidden', layer1)
-
-      wts = nnet.vals(mod.in, nid = F, rel.rsc)
-      wts = unlist(lapply(wts[grep(src.str, names(wts))], function(x)
-        x[all.in + 1]))
-      wts.rs = nnet.vals(mod.in, nid = T, rel.rsc)
-      wts.rs = unlist(lapply(wts.rs[grep(src.str, names(wts.rs))], function(x)
-        x[all.in + 1]))
-
-      cols = rep(pos.col, struct[layer2])
-      cols[wts < 0] = neg.col
-
-      #my flag
-      lwd = wts.rs
-      lwd[lwd == 1] = 0
-
-      if (nid)
-        segments(x0, y0, x1, y1, col = cols, lwd = lwd)
-      else
-        segments(x0, y0, x1, y1)
-
-    }
-
-  }
-
-  bias.lines = function(bias.x,
-                        mod.in,
-                        nid,
-                        rel.rsc,
-                        all.out,
-                        pos.col,
-                        neg.col,
-                        ...) {
-    if (is.logical(all.out))
-      all.out = 1:struct[length(struct)]
-    else
-      all.out = which(y.names == all.out)
-
-    for (val in 1:length(bias.x)) {
-      wts = nnet.vals(mod.in, nid = F, rel.rsc)
-      wts.rs = nnet.vals(mod.in, nid = T, rel.rsc)
-
-      if (val != length(bias.x)) {
-        wts = wts[grep('out', names(wts), invert = T)]
-        wts.rs = wts.rs[grep('out', names(wts.rs), invert = T)]
-        sel.val = grep(val, substr(names(wts.rs), 8, 8))
-        wts = wts[sel.val]
-        wts.rs = wts.rs[sel.val]
-      }
-
-      else{
-        wts = wts[grep('out', names(wts))]
-        wts.rs = wts.rs[grep('out', names(wts.rs))]
-      }
-
-      cols = rep(pos.col, length(wts))
-      cols[unlist(lapply(wts, function(x)
-        x[1])) < 0] = neg.col
-      wts.rs = unlist(lapply(wts.rs, function(x)
-        x[1]))
-
-      if (nid == F) {
-        wts.rs = rep(1, struct[val + 1])
-        cols = rep('black', struct[val + 1])
-      }
-
-      if (val != length(bias.x)) {
-        segments(
-          rep(
-            diff(x.range) * bias.x[val] + diff(x.range) * line.stag,
-            struct[val + 1]
-          ),
-          rep(bias.y * diff(y.range), struct[val + 1]),
-          rep(
-            diff(x.range) * layer.x[val + 1] - diff(x.range) * line.stag,
-            struct[val + 1]
-          ),
-          get.ys(struct[val + 1]),
-          lwd = wts.rs,
-          col = cols
-        )
-      }
-
-      else{
-        segments(
-          rep(
-            diff(x.range) * bias.x[val] + diff(x.range) * line.stag,
-            struct[val + 1]
-          ),
-          rep(bias.y * diff(y.range), struct[val + 1]),
-          rep(
-            diff(x.range) * layer.x[val + 1] - diff(x.range) * line.stag,
-            struct[val + 1]
-          ),
-          get.ys(struct[val + 1])[all.out],
-          lwd = wts.rs[all.out],
-          col = cols[all.out]
-        )
-      }
-
-    }
-  }
-
-  #use functions to plot connections between layers
-  #bias lines
-  if (bias)
-    bias.lines(
-      bias.x,
-      mod.in,
-      nid = nid,
-      rel.rsc = rel.rsc,
-      all.out = all.out,
-      pos.col = alpha(pos.col, alpha.val),
-      neg.col = alpha(neg.col, alpha.val)
-    )
-
-  #layer lines, makes use of arguments to plot all or for individual layers
-  #starts with input-hidden
-  #uses all.in argument to plot connection lines for all input nodes or a single node
-  if (is.logical(all.in)) {
-    mapply(
-      function(x)
-        layer.lines(
-          mod.in,
-          x,
-          layer1 = 1,
-          layer2 = 2,
-          nid = nid,
-          rel.rsc = rel.rsc,
-          all.in = all.in,
-          pos.col = alpha(pos.col, alpha.val),
-          neg.col = alpha(neg.col, alpha.val)
-        ),
-      1:struct[1]
-    )
-  }
-  else{
-    node.in = which(x.names == all.in)
-    layer.lines(
-      mod.in,
-      node.in,
-      layer1 = 1,
-      layer2 = 2,
-      nid = nid,
-      rel.rsc = rel.rsc,
-      all.in = all.in,
-      pos.col = alpha(pos.col, alpha.val),
-      neg.col = alpha(neg.col, alpha.val)
-    )
-  }
-  #connections between hidden layers
-  lays = split(c(1, rep(2:(length(
-    struct
-  ) - 1), each = 2), length(struct)),
-  f = rep(1:(length(struct) - 1), each = 2))
-  lays = lays[-c(1, (length(struct) - 1))]
-  for (lay in lays) {
-    for (node in 1:struct[lay[1]]) {
-      layer.lines(
-        mod.in,
-        node,
-        layer1 = lay[1],
-        layer2 = lay[2],
-        nid = nid,
-        rel.rsc = rel.rsc,
-        all.in = T,
-        pos.col = alpha(pos.col, alpha.val),
-        neg.col = alpha(neg.col, alpha.val)
-      )
-    }
-  }
-  #lines for hidden-output
-  #uses all.out argument to plot connection lines for all output nodes or a single node
-  if (is.logical(all.out))
-    mapply(
-      function(x)
-        layer.lines(
-          mod.in,
-          x,
-          layer1 = length(struct) - 1,
-          layer2 = length(struct),
-          out.layer = T,
-          nid = nid,
-          rel.rsc = rel.rsc,
-          all.in = all.in,
-          pos.col = alpha(pos.col, alpha.val),
-          neg.col = alpha(neg.col, alpha.val)
-        ),
-      1:struct[length(struct)]
-    )
-  else{
-    node.in = which(y.names == all.out)
-    layer.lines(
-      mod.in,
-      node.in,
-      layer1 = length(struct) - 1,
-      layer2 = length(struct),
-      out.layer = T,
-      nid = nid,
-      rel.rsc = rel.rsc,
-      pos.col = pos.col,
-      neg.col = neg.col,
-      all.out = all.out
-    )
-  }
-
-  #use functions to plot nodes
-  for (i in 1:length(struct)) {
-    in.col = circle.col
-    #layer.name='H'
-    layer.name = hidden_node_names
-    if (i == 1) {
-      layer.name = 'I'
-      in.col = circle.col.inp
-    }
-    if (i == length(struct))
-      layer.name = 'O'
-    layer.points(struct[i], layer.x[i], layer.name)
-  }
-
-  if (bias)
-    bias.points(bias.x, bias.y, 'B')
-
-}
-
-#' @importFrom ggthemes theme_foundation
-theme_Publication <- function(base_size=14, base_family="Helvetica") {
-  #library(grid)
-  #library(ggthemes)
-  (theme_foundation(base_size=base_size, base_family=base_family)
-    + theme(plot.title = element_text(face = "bold",
-                                      size = rel(1.2), hjust = 0.5),
-            text = element_text(),
-            panel.background = element_rect(colour = NA),
-            plot.background = element_rect(colour = NA),
-            panel.border = element_rect(colour = NA),
-            axis.title = element_text(face = "bold",size = rel(0.9)),
-            axis.title.y = element_text(angle=90,vjust =2),
-            axis.title.x = element_text(vjust = -0.2),
-            axis.text = element_text(),
-            axis.line = element_line(colour="black"),
-            axis.ticks = element_line(),
-            panel.grid.major = element_line(colour="#f0f0f0"),
-            panel.grid.minor = element_blank(),
-            legend.key = element_rect(colour = NA),
-            legend.position = "left",
-            #legend.direction = "horizontal",
-            legend.key.size= unit(0.2, "cm"),
-            legend.spacing = unit(0, "cm"),
-            legend.title = element_text(face="italic"),
-            plot.margin=unit(c(10,5,5,5),"mm"),
-            strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
-            strip.text = element_text(face="bold")
-    ))
-
-}
 
 

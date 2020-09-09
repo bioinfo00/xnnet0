@@ -23,9 +23,25 @@ build_xnnet(
 
 \item{annotation_libraries}{a list of annotation libraries. Each library is a list of gene sets
 gene sets}
+
+\item{n_input_nodes}{maximum number of input nodes per hidden nodes}
+
+\item{n_hidden_nodes}{number of hidden nodes in the network}
+
+\item{n_unassigned}{number of input genes not assigned to a specific gene set}
+
+\item{number}{number of bootstrap samples for network training}
+
+\item{min_decay}{minimum value of the decay parameter for regularization}
+
+\item{max_decay}{maximum value of the decay parameter for regularization}
+}
+\value{
+A list containing an xnnet object for each annotation library
 }
 \description{
-This function builds xnnet using a labeled training set and a list of annotation libraries
+This function builds xnnet using a labeled training set of transcriptional profiles,
+and a list of annotation libraries
 }
 \examples{
 data("GSE37250") #load Tubercolosis dataset
