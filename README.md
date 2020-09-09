@@ -23,7 +23,7 @@ devtools::install_git("bioinfo/xnnet0")
 
 This is a basic example
 
-\#\#Building xnnet
+## Building xnnet
 
 ``` r
 library(xnnet0)
@@ -44,10 +44,44 @@ annotation_libraries = annotation_libraries)
 #> [1] "done"
 ```
 
-\#\#Plotting xnnet
+## Predictions and evaluation
+
+``` r
+#predictions on test set
+xnnet_predictions = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
+
+#assess model performance
+xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test)
+
+xnnet_performance$AUC_plot 
+```
+
+<img src="man/figures/README-performance-1.png" width="100%" />
+
+``` r
+xnnet_performance$AUC_interpretability_plot
+```
+
+<img src="man/figures/README-performance-2.png" width="100%" />
+
+## Plotting xnnet
 
 ``` r
 plot_xnnet(xnnet$Reactome_2016)
 ```
 
 <img src="man/figures/README-plot-1.png" width="100%" />
+
+## Plotting the average hidden node in the two classes
+
+``` r
+# library(ggradar)
+#  
+# sample_activation = compute_hidden_activation(xnnet$Reactome_2016, X = GSE37250_split$X_train, y = GSE37250_split$y_train)
+# 
+# mean_hidden_activation = sample_activation %>%
+#   dplyr::select(-sample) %>% dplyr::group_by(class) %>%
+#   dplyr::summarise_all(mean)
+# 
+# ggradar(mean_hidden_activation)
+```

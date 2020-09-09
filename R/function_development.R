@@ -1,13 +1,34 @@
-data("GSE37250") #load Tubercolosis dataset
-data("annotation_libraries")
-GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
-xnnet = build_xnnet(X_train = GSE37250_split$X_train, y_train = GSE37250_split$y_train,
-                    annotation_libraries = annotation_libraries,
-                    n_input_nodes = 4, n_hidden_nodes = 4)
-pred = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
-
-p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
-
+# data("GSE37250") #load Tubercolosis dataset
+# data("annotation_libraries") #load annotation libraries
+#
+# #split data
+# GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
+#
+# #network cross-validation
+# xnnet = build_xnnet(X_train = GSE37250_split$X_train,
+#                     y_train = GSE37250_split$y_train,
+#                     annotation_libraries = annotation_libraries,
+#                     n_input_nodes = 3, n_hidden_nodes = 3)
+#
+# #predictions on test set
+# xnnet_predictions = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
+#
+# #assess model performance
+# xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test)
+# #
+# # # #plotting network
+# # # plot_xnnet(xnnet$Reactome_2016)
+# # #
+# # # #plot mean activation state in the two groups
+# sample_activation = compute_hidden_activation(xnnet$BioCarta_2016,
+#                                        X = GSE37250_split$X_train,
+#                                        y = GSE37250_split$y_train)
+#
+# sample_mean_activation = sample_activation %>% dplyr::select(-sample) %>%
+#   dplyr::group_by(class) %>% dplyr::summarise_all(mean)
+#
+# library(ggradar)
+# ggradar(sample_mean_activation)
 
 
 # X = X[, row.names(xnnet$BioCarta_2016$xnnet_binary_matrix)]
@@ -301,6 +322,8 @@ p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
 # # #
 # # # }
 # # #
+
+
 # # # split_data = train_test_split(GSE37250$X, GSE37250$y)
 # # # X_train = split_data$X_train
 # # # y_train = split_data$y_train
@@ -350,7 +373,7 @@ p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
 # # #
 # #
 # #
-# # db_gene_sets = readRDS("../../../xnnet/neural_nets/db_gene_sets")
+#db_gene_sets = readRDS("../../xnnet/neural_nets/db_gene_sets")
 # # annotation_libraries = lapply(db_gene_sets, function(x) x$db_gene_sets_list)
 # # annotation_libraries = annotation_libraries[-c(5, 13, 14)]
 # # GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
@@ -488,10 +511,59 @@ p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
 # #
 # #
 # #
-# # all_GSEA_results = plyr::ldply(GSEA_results, rbind)
-# # ggplot(all_GSEA_results, aes(x = .id, y = abs(NES))) +
-# #   geom_boxplot() + coord_flip()
-# #
+
+
+# db_gene_sets = readRDS("../../xnnet/neural_nets/db_gene_sets")
+# annotation_libraries = lapply(db_gene_sets, function(x) x$db_gene_sets_list)
+# #annotation_libraries = annotation_libraries[-c(5, 13, 14)]
+# GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
+# X_train = GSE37250_split$X_train
+# y_train = GSE37250_split$y_train
+#
+# limma_results = get_limma_results(GSE37250_split$X_train,
+#                                   GSE37250_split$y_train)
+# GSEA_results = lapply(annotation_libraries, function(x)
+#                       get_GSEA_results(limma_results, x))
+#
+# all_GSEA_results = plyr::ldply(GSEA_results, rbind)
+# ggplot(all_GSEA_results, aes(x = .id, y = abs(NES))) +
+#   geom_boxplot() + coord_flip()
+#
+# ggplot(all_GSEA_results, aes(x = log10(size), y = abs(NES), text = pathway)) +
+#   geom_point(aes(col = .id))
+# plotly::ggplotly()
+#
+#
+# limma_results = get_limma_results(GSE37250_split$X_train,
+#                                   GSE37250_split$y_train)
+#
+# GSEA_results = lapply(annotation_libraries, function(x)
+#   get_GSEA_results(limma_results, x))
+#
+# all_GSEA_results = plyr::ldply(GSEA_results, rbind)
+# ggplot(all_GSEA_results, aes(x = .id, y = abs(NES))) +
+#   geom_boxplot() + coord_flip()
+#
+# ggplot(all_GSEA_results, aes(x = log10(size), y = abs(NES), text = pathway)) +
+#   geom_point(aes(col = .id))
+#
+#
+# GSEA_results = renormalize_NES(GSEA_results)
+# all_GSEA_results = plyr::ldply(GSEA_results, rbind)
+# ggplot(all_GSEA_results, aes(x = .id, y = abs(renormalized_NES))) +
+#   geom_boxplot() + coord_flip() + theme_Publication() + theme(legend.position = "none")
+#
+#
+# ggplot(all_GSEA_results, aes(x = log10(size), y = abs(renormalized_NES), text = pathway)) +
+#   geom_point(aes(col = .id)) + theme_Publication() + theme(legend.position = "none")
+#
+# ggplot(all_GSEA_results, aes(x = log10(size), y = abs(NES), text = pathway)) +
+#   geom_point(aes(col = .id)) + theme_Publication() + theme(legend.position = "none")
+#
+#
+# plotly::ggplotly()
+
+
 # # ggplot(all_GSEA_results, aes(x = log10(size), y = abs(NES), text = pathway)) +
 # #   geom_point(aes(col = .id))
 # # plotly::ggplotly()
@@ -512,21 +584,21 @@ p = assess_xnnet_performance(xnnet, pred, true_labels = GSE37250_split$y_test)
 # # plotly::ggplotly()
 # #
 # #
-# # renormalize_NES = function(GSEA_results){
-# #
-# #   all_GSEA_results = plyr::ldply(GSEA_results, rbind)
-# #
-# #   model = lm(abs(NES) ~ log10(size) + .id, data = all_GSEA_results)
-# #   all_GSEA_results$renormalized_NES = abs(all_GSEA_results$NES) - model$fitted.values
-# #
-# #   all_GSEA_results = all_GSEA_results %>% dplyr::filter(renormalized_NES > 0) %>%
-# #     dplyr::arrange(desc(renormalized_NES))
-# #
-# #   GSEA_results = split(all_GSEA_results, all_GSEA_results$.id)
-# #
-# #   return(GSEA_results)
-# #
-# # }
+# renormalize_NES = function(GSEA_results){
+#
+#   all_GSEA_results = plyr::ldply(GSEA_results, rbind)
+#
+#   model = lm(abs(NES) ~ log10(size) + .id, data = all_GSEA_results)
+#   all_GSEA_results$renormalized_NES = abs(all_GSEA_results$NES) - model$fitted.values
+#
+#   all_GSEA_results = all_GSEA_results %>% dplyr::filter(renormalized_NES > 0) %>%
+#     dplyr::arrange(desc(renormalized_NES))
+#
+#   GSEA_results = split(all_GSEA_results, all_GSEA_results$.id)
+#
+#   return(GSEA_results)
+#
+# }
 # #
 # #
 # #

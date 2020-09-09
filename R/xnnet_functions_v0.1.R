@@ -536,11 +536,6 @@ cross_validate_xnnet = function(X_train,
   #with optimization of the decay (regularization) parameter
   X_train = X_train[, row.names(xnnet_binary_matrix)]
 
-  augmented_data = augment_data(X_train, y_train, multiply = 5)
-  X_train = augmented_data$augmented_X
-  y_train = augmented_data$augmented_y
-  y_train = factor(ifelse(y_train == 1, 'positive', 'negative'))
-
   #grid to optimize decay parameter
   nnetGrid =  expand.grid(
     size = ncol(xnnet_binary_matrix),
@@ -562,16 +557,22 @@ cross_validate_xnnet = function(X_train,
 
   normalized_X = normalize_X(X_train)
   X_train = data.frame(normalized_X$X)
+
+  augmented_data = augment_data(X_train, y_train, multiply = 10)
+  X_train_augmented = augmented_data$augmented_X
+  y_train_augmented = augmented_data$augmented_y
+  y_train_augmented = factor(ifelse(y_train_augmented == 1, 'positive', 'negative'))
+
   X_train_center = normalized_X$X_center
   X_train_scale = normalized_X$X_scale
 
   nnetFit = caret::train(
-    x = X_train,
-    y = y_train,
+    x = X_train_augmented,
+    y = y_train_augmented,
     method = "nnet",
     metric = "ROC",
     MaxNWts = MaxNWts,
-    maxit = 10,
+    maxit = 50,
     mask = mask,
     Wts = initial_weights,
     trControl = fitControl,
@@ -926,6 +927,7 @@ assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels){
 }
 
 
+
 compute_hidden_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
 
   colnames(X) = make.names(colnames(X), unique = T)
@@ -934,8 +936,8 @@ compute_hidden_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
   X = scale(X, center = T)
 
   #threshold to handle potential outliers (treshold is the same as in training set)
-  #X[X > zscore_threshold] = zscore_threshold
-  #X[X < -zscore_threshold] = -zscore_threshold
+  X[X > zscore_threshold] = zscore_threshold
+  X[X < -zscore_threshold] = -zscore_threshold
 
   weights = xnnet_single$nnetFit$finalModel$wts
   xnnet_binary_matrix = xnnet_single$xnnet_binary_matrix
