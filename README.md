@@ -27,25 +27,6 @@ This is a basic example
 
 ``` r
 library(xnnet0)
-#> Loading required package: dplyr
-#> 
-#> Attaching package: 'dplyr'
-#> The following objects are masked from 'package:stats':
-#> 
-#>     filter, lag
-#> The following objects are masked from 'package:base':
-#> 
-#>     intersect, setdiff, setequal, union
-#> Loading required package: ggplot2
-#> Loading required package: testthat
-#> 
-#> Attaching package: 'testthat'
-#> The following object is masked from 'package:dplyr':
-#> 
-#>     matches
-#> Registered S3 method overwritten by 'seriation':
-#>   method         from 
-#>   reorder.hclust gclus
 data("GSE37250") #load Tubercolosis dataset
 data("annotation_libraries")
 GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
@@ -60,7 +41,6 @@ annotation_libraries = annotation_libraries)
 #> [1] "step 2 of 3: processing GSEA results"
 #> [1] "done"
 #> [1] "step 3 of 3: cross-validating neural networks"
-#> Loading required package: lattice
 #> [1] "done"
 ```
 

@@ -33,7 +33,7 @@ devtools::install_git("bioinfo/xnnet0")
 This is a basic example
 
 ##Building xnnet
-```{r example}
+```{r example, message=FALSE}
 library(xnnet0)
 data("GSE37250") #load Tubercolosis dataset
 data("annotation_libraries")
