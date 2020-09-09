@@ -1,0 +1,49 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# xnnet0
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The goal of xnnet0 is to build interpretable neural netwroks to solve a classification problem. 
+
+## Installation
+
+You can install the development version from [GitHub](https://github.com/) with:
+
+``` r
+devtools::install_git("bioinfo/xnnet0")
+```
+
+## Example
+
+This is a basic example
+
+##Building xnnet
+```{r example}
+library(xnnet0)
+data("GSE37250") #load Tubercolosis dataset
+data("annotation_libraries")
+GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
+xnnet = build_xnnet(X_train = GSE37250_split$X_train, y_train = GSE37250_split$y_train,
+annotation_libraries = annotation_libraries)
+```
+
+
+##Plotting xnnet
+```{r plot}
+plot_xnnet(xnnet$Reactome_2016)
+```
