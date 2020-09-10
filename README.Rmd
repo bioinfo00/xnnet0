@@ -62,15 +62,16 @@ plot_xnnet(xnnet$Reactome_2016)
 
 ## Plotting the average hidden node in the two classes
 ```{r activation}
-# library(ggradar)
-# 
-# sample_activation = compute_activation(xnnet$Reactome_2016, X = GSE37250_split$X_train, y = GSE37250_split$y_train)
-# 
-# mean_hidden_activation = sample_activation %>%
-#   dplyr::select(-sample) %>% dplyr::group_by(class) %>%
-#   dplyr::summarise_all(mean)
-# 
-# ggradar(mean_hidden_activation)
+library(ggradar)
+
+sample_activation = compute_activation(xnnet$Reactome_2016, X = GSE37250_split$X_train, y = GSE37250_split$y_train)
+
+mean_hidden_activation = sample_activation %>%
+  dplyr::select(-sample) %>% dplyr::group_by(class) %>%
+  dplyr::summarise_all(mean)
+
+colnames(mean_hidden_activation) = gsub("_Homo.*","",colnames(mean_hidden_activation))
+ggradar(mean_hidden_activation, plot.extent.x.sf = 1.5, plot.extent.y.sf = 1.5, legend.position = 'bottom')
 ```
 
 

@@ -1,25 +1,3 @@
-# data("GSE37250") #load Tubercolosis dataset
-# # data("annotation_libraries") #load annotation libraries
-# GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
-#
-# X_train = GSE37250_split$X_train
-# y_train = GSE37250_split$y_train
-# exp_design = factor(ifelse(y_train == 0, 'class_neg', 'class_pos'))
-# exp_design_matrix = model.matrix( ~ 0 + exp_design)
-#
-#
-# exp_design = data.frame(class_neg = ifelse(y_train == 0, 1, 0),
-#                         class_pos = ifelse(y_train == 1, 1, 0))
-# exp_design_matrix = model.matrix( ~ 0 + class_neg + class_pos, exp_design)
-# contrast_matrix = limma::makeContrasts(exp_designclass_pos - exp_designclass_neg,
-#                                        levels = exp_design_matrix)
-#
-# fitTrtMean = limma::lmFit(t(X_train), exp_design_matrix)
-# fit_contrast = limma::contrasts.fit(fitTrtMean, contrast_matrix)
-# efit_contrast = limma::eBayes(fit_contrast)
-
-
-
 # #split data
 # GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
 #
@@ -28,13 +6,72 @@
 #                     y_train = GSE37250_split$y_train,
 #                     annotation_libraries = annotation_libraries,
 #                     n_input_nodes = 3, n_hidden_nodes = 3)
-#
-# #predictions on test set
+# #
+# # #predictions on test set
 # xnnet_predictions = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
 #
-# #assess model performance
+# # #assess model performance
 # xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test)
-# #
+#
+# xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test, metric = 'accuracy')
+#
+#
+#
+# assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels, metric = 'AUC'){
+#
+#   training_true_labels = xnnet[[1]]$nnetFit$trainingData %>% dplyr::select(.data$.outcome)
+#   end_of_real_data = which(row.names(training_true_labels) == 1) - 1
+#   training_true_labels = training_true_labels %>% pull()
+#   training_true_labels = training_true_labels[1:end_of_real_data]
+#
+#   if (match.arg(metric, c('AUC', 'accuracy')) == 'AUC'){
+#
+#     #pull out AUC on training set from xnnet object
+#     train_performance = sapply(xnnet, function(x) pROC::auc(training_true_labels,
+#                                                                   x$nnetFit$finalModel$fitted.values[1:end_of_real_data] %>% as.numeric, direction="<",
+#                                                                   levels= c('negative', 'positive')))
+#
+#     #compute AUC on set
+#     test_performance = sapply(xnnet_predictions, function(x) pROC::auc(true_labels, x, direction="<",
+#                                                                             levels= c('0', '1')))
+#
+#   } else {
+#
+#     train_predicted_label = lapply(xnnet, function(x) ifelse(x$nnetFit$finalModel$fitted.values > 0.5, 'positive', 'negative'))
+#     train_performance = sapply(train_predicted_label, function(x) sum(x[1:end_of_real_data] == training_true_labels)/length(training_true_labels))
+#
+#     test_predicted_label = lapply(xnnet_predictions, function(x) ifelse(x > 0.5, 1, 0))
+#     test_performance = sapply(test_predicted_label, function(x) sum(x == true_labels)/length(true_labels))
+#
+#   }
+#
+#   interpretability = sapply(xnnet, function(x) x$interpretability_score)
+#
+#   global_performance = data.frame(
+#     annotation_library = names(xnnet),
+#     train_performance = train_performance,
+#     test_performance = test_performance,
+#     interpretability = interpretability,
+#     metric = metric
+#   )
+#   row.names(global_performance) = NULL
+#
+#   performance_plot = ggplot(global_performance, aes(x = reorder(.data$annotation_library, .data$test_performance), y = .data$test_performance, .data$label)) +
+#     geom_col(col = 'white') + coord_flip() + theme_Publication() + xlab('') + ylab(paste(metric, 'on test'))
+#
+#   performance_interpretability_plot = ggplot(global_performance, aes(x = .data$test_performance, y = .data$interpretability, label = .data$annotation_library)) +
+#     geom_point(size = 4) + theme_Publication() + xlab(paste(metric, 'on test')) + ylab('interpretability') + ggrepel::geom_text_repel(size=6)
+#
+#
+#   return(list(global_performance = global_performance,
+#               performance_plot = performance_plot,
+#               performance_interpretability_plot = performance_interpretability_plot))
+#
+# }
+
+
+
+
 # # # #plotting network
 # # # plot_xnnet(xnnet$Reactome_2016)
 # # #

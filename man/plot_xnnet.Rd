@@ -8,6 +8,8 @@ plot_xnnet(xnnet, color = "gray70")
 }
 \arguments{
 \item{xnnet}{output of build_xnnet}
+
+\item{color}{color of input nodes and edges}
 }
 \description{
 This function splits a dataset and corresponding

@@ -20,6 +20,8 @@ get_GSEA_results(
 \item{min_term_size}{min size of annotation term (default = 10)}
 
 \item{max_term_size}{max size of annotation term (default = Inf)}
+
+\item{rank_metric}{statistic used to rank genes for GSEA}
 }
 \description{
 This function performs GSEA using the Limma output and an annotation library

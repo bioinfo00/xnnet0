@@ -2,11 +2,13 @@
 
 export(assess_xnnet_performance)
 export(build_xnnet)
+export(compute_activation)
 export(plot_xnnet)
 export(plot_xnnet_heatmap)
 export(plot_xnnet_input_genes)
 export(threshold_scaled_data)
 export(train_test_split)
+export(xnnet_predict)
 import(caret)
 import(dplyr)
 import(ggplot2)

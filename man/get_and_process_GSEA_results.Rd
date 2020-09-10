@@ -6,6 +6,11 @@
 \usage{
 get_and_process_GSEA_results(annotation_libraries, limma_results)
 }
+\arguments{
+\item{annotation_libraries}{list of gene annotation libraries}
+
+\item{limma_results}{results of limma (output of get_limma_results)}
+}
 \description{
 Renormalize NES produced by GSEA
 }

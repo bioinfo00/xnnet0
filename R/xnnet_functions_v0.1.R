@@ -179,7 +179,7 @@ get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
 #' @param annotation_library list of gene sets contained in a given annotation library
 #' @param min_term_size min size of annotation term (default = 10)
 #' @param max_term_size max size of annotation term (default = Inf)
-#' @param rank_metric
+#' @param rank_metric statistic used to rank genes for GSEA
 #' @importFrom fgsea fgsea
 #' @importFrom testthat expect_true
 
@@ -231,7 +231,7 @@ get_GSEA_results = function(limma_results,
 #' Renormalize NES produced by GSEA
 #'
 #' @importFrom plyr ldply
-#' @param GSEA_results
+#' @param GSEA_results output of get_GSEA_results
 
 renormalize_NES = function(GSEA_results){
 
@@ -252,8 +252,8 @@ renormalize_NES = function(GSEA_results){
 #' Renormalize NES produced by GSEA
 #'
 #' @importFrom plyr ldply
-#' @param annotation_libraries
-#' @param limma_results
+#' @param annotation_libraries list of gene annotation libraries
+#' @param limma_results results of limma (output of get_limma_results)
 get_and_process_GSEA_results = function(annotation_libraries,
                                         limma_results){
 
@@ -338,8 +338,9 @@ build_single_xnnet = function(X_train,
 #' }
 #' @importFrom parallel mclapply
 
-reduce_GSEA_results = function(GSEA_results, topN = 10, nThreads = 1) {
+reduce_GSEA_results = function(GSEA_results, topN = 10) {
 
+  nThreads = 1
   idsInSet = GSEA_results$leadingEdge
   names(idsInSet) = GSEA_results$pathway
   #costs = scale(GSEA_results$size/abs(GSEA_results$NES))
@@ -635,28 +636,7 @@ cross_validate_xnnet = function(X_train,
 
 }
 
-compute_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
 
-  colnames(X) = make.names(colnames(X), unique = T)
-  xnnet_input_nodes = xnnet_single$nnetFit$finalModel$coefnames
-  X = X[, xnnet_input_nodes]
-  X = scale(X, center = T)
-
-  #threshold to handle potential outliers (treshold is the same as in training set)
-  X[X > zscore_threshold] = zscore_threshold
-  X[X < -zscore_threshold] = -zscore_threshold
-
-  weights = xnnet_single$nnetFit$finalModel$wts
-  xnnet_binary_matrix = xnnet_single$xnnet_binary_matrix
-
-  mask = xnnet_single$nnetFit$finalModel$param$mask
-  decoded_weights = decode_weights(weights, mask, xnnet_binary_matrix)
-  hidden_activation = data.frame(sigmoid(cbind(1, X) %*% decoded_weights$first_layer))
-  hidden_activation$sample = row.names(X)
-  hidden_activation$class = factor(y)
-
-  return(hidden_activation)
-}
 
 #' @importFrom  fMultivar mvFit
 augment_data = function(X, y, multiply = 2){
@@ -694,8 +674,8 @@ augment_data = function(X, y, multiply = 2){
 
 #' Predict sample labels using xnnet
 #'
-#' @param xnnet xxnet object return by the function build_xnnet
-#' @param X_test test data
+#' @param scaled_data scaled data
+#' @param z_threshold threshold on scaled data
 #' @export
 
 threshold_scaled_data = function(scaled_data, z_threshold){
@@ -739,6 +719,16 @@ xnnet_predict_single = function(xnnet_single, X_test, z_threshold) {
   return(xnnet_predictions_probs)
 }
 
+
+#' Generating xnnet predictions on a set of samples
+#'
+#' This function produces class probabilities on a set of samples
+#' labels into a training and test set
+#' @param xnnet transcriptomics data with samples as rows and genes as features
+#' @param X_test binary label for each sample in X
+#' @param z_threshold fraction of data for training
+#' @export
+#' @examples
 xnnet_predict = function(xnnet, X_test, z_threshold = 3){
   xnnet_predictions = lapply(xnnet, function(x) xnnet_predict_single(x, X_test, z_threshold = z_threshold))
   return(xnnet_predictions)
@@ -746,24 +736,35 @@ xnnet_predict = function(xnnet, X_test, z_threshold = 3){
 
 #' Assessing performance of xnnet predictions given labels
 #'
-#' This function plots xnnet as a heatmap with genes as rows and samples as columns.
-#' Genes are grouped by the corresponding annotation and rows are grouped by sample class.
-#' labels into a training and test set
-#' @param xnnet_predictions output of build_xnnet
-#' @param true_labels hidden node index
+#' @param xnnet xnnet object
+#' @param xnnet_predictions xnnet predictions on a set of samples
+#' @param true_labels true labels of predicted classs
 #' @import ggplot2
 #' @importFrom pROC auc
 #' @export
-assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels){
+assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels, metric = 'AUC'){
 
-  #pull out AUC on training set from xnnet object
-  xnnet_train_AUC = sapply(xnnet, function(x) pROC::auc(x$nnetFit$trainingData %>% dplyr::select(.data$.outcome) %>% pull(),
-                                                        x$nnetFit$finalModel$fitted.values %>% as.numeric, direction="<",
-                                                        levels= c('negative', 'positive')))
 
-  #compute AUC on set
-  xnnet_test_AUC = sapply(xnnet_predictions, function(x) pROC::auc(true_labels, x, direction="<",
-                                                                   levels= c('0', '1')))
+  if (match.arg(metric, c('AUC', 'accuracy')) == 'AUC'){
+
+    #pull out AUC on training set from xnnet object
+    xnnet_train_AUC = sapply(xnnet, function(x) pROC::auc(x$nnetFit$trainingData %>% dplyr::select(.data$.outcome) %>% pull(),
+                                                          x$nnetFit$finalModel$fitted.values %>% as.numeric, direction="<",
+                                                          levels= c('negative', 'positive')))
+
+    #compute AUC on set
+    xnnet_test_AUC = sapply(xnnet_predictions, function(x) pROC::auc(true_labels, x, direction="<",
+                                                                     levels= c('0', '1')))
+
+    } else {
+
+
+
+
+
+    }
+
+
 
   xnnet_interpretability =sapply(xnnet, function(x) x$interpretability_score)
 
@@ -811,5 +812,34 @@ decode_weights = function(W, mask, xnnet_binary_matrix, n_classes = 2) {
 }
 
 
+#' Computing activation state of hidden nodes
+#'
+#' @param xnnet_single output of build_xnnet
+#' @param X matrix of transcriptional profiles (samples x genes)
+#' @param y binay vector of labels for each sample
+#' @param zscore_threshold threshold on zscores
+#' @export
 
+compute_activation = function(xnnet_single, X, y, zscore_threshold = 3) {
+
+  colnames(X) = make.names(colnames(X), unique = T)
+  xnnet_input_nodes = xnnet_single$nnetFit$finalModel$coefnames
+  X = X[, xnnet_input_nodes]
+  X = scale(X, center = T)
+
+  #threshold to handle potential outliers (treshold is the same as in training set)
+  X[X > zscore_threshold] = zscore_threshold
+  X[X < -zscore_threshold] = -zscore_threshold
+
+  weights = xnnet_single$nnetFit$finalModel$wts
+  xnnet_binary_matrix = xnnet_single$xnnet_binary_matrix
+
+  mask = xnnet_single$nnetFit$finalModel$param$mask
+  decoded_weights = decode_weights(weights, mask, xnnet_binary_matrix)
+  hidden_activation = data.frame(sigmoid(cbind(1, X) %*% decoded_weights$first_layer))
+  hidden_activation$sample = row.names(X)
+  hidden_activation$class = factor(y)
+
+  return(hidden_activation)
+}
 

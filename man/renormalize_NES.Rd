@@ -6,6 +6,9 @@
 \usage{
 renormalize_NES(GSEA_results)
 }
+\arguments{
+\item{GSEA_results}{output of get_GSEA_results}
+}
 \description{
 Renormalize NES produced by GSEA
 }

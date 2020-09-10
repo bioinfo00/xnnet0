@@ -3,6 +3,7 @@
 #' This function splits a dataset and corresponding
 #' labels into a training and test set
 #' @param xnnet output of build_xnnet
+#' @param color color of input nodes and edges
 #' @importFrom scales rescale
 #' @importFrom RColorBrewer brewer.pal
 #' @import lattice
@@ -744,6 +745,7 @@ plot_nnet = function(mod.in,
     bias.points(bias.x, bias.y, 'B')
 
 }
+
 
 #' @importFrom ggthemes theme_foundation
 theme_Publication <- function(base_size=14, base_family="Helvetica") {

@@ -7,9 +7,9 @@
 threshold_scaled_data(scaled_data, z_threshold)
 }
 \arguments{
-\item{xnnet}{xxnet object return by the function build_xnnet}
+\item{scaled_data}{scaled data}
 
-\item{X_test}{test data}
+\item{z_threshold}{threshold on scaled data}
 }
 \description{
 Predict sample labels using xnnet

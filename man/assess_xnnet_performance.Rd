@@ -4,15 +4,15 @@
 \alias{assess_xnnet_performance}
 \title{Assessing performance of xnnet predictions given labels}
 \usage{
-assess_xnnet_performance(xnnet, xnnet_predictions, true_labels)
+assess_xnnet_performance(xnnet, xnnet_predictions, true_labels, metric = "AUC")
 }
 \arguments{
-\item{xnnet_predictions}{output of build_xnnet}
+\item{xnnet}{xnnet object}
 
-\item{true_labels}{hidden node index}
+\item{xnnet_predictions}{xnnet predictions on a set of samples}
+
+\item{true_labels}{true labels of predicted classs}
 }
 \description{
-This function plots xnnet as a heatmap with genes as rows and samples as columns.
-Genes are grouped by the corresponding annotation and rows are grouped by sample class.
-labels into a training and test set
+Assessing performance of xnnet predictions given labels
 }

@@ -4,7 +4,7 @@
 \alias{reduce_GSEA_results}
 \title{Reducing GSEA results with Weighted Set Cover}
 \usage{
-reduce_GSEA_results(GSEA_results, topN = 10, nThreads = 1)
+reduce_GSEA_results(GSEA_results, topN = 10)
 }
 \arguments{
 \item{GSEA_results}{GSEA results (output of get_GSEA_results)}
