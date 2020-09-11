@@ -1,13 +1,13 @@
-context("testing weight initialization")
+data("GSE37250")
+GSE37250_split = train_test_split(GSE37250$X, GSE37250$y)
 
-test_that("zeros in mask and initial weight
-         vector are in the same position",
+context("testing xnnet helper functions")
+
+test_that("testing Limma output",
          {
-           mask = sample(0:1, 10, replace = T)
-           zeros_in_mask = which(mask == 0)
+           limma_results = get_limma_results(GSE37250_split$X_train,
+                                             GSE37250_split$y_train)
 
-           initial_weights = initialize_weights(mask = mask)
-           zeros_in_initial_weight_vector = which(initial_weights == 0)
+           expect_equal(nrow(limma_results), ncol(GSE37250_split$X_train))
 
-           expect_equal(zeros_in_mask, zeros_in_initial_weight_vector)
          })

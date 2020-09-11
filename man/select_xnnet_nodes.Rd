@@ -16,9 +16,9 @@ select_xnnet_nodes(
 
 \item{limma_results}{Limma results}
 
-\item{n_input_nodes}{number of input nodes (default = 5)}
+\item{n_input_nodes}{number of input nodes}
 
-\item{n_hidden_nodes}{number of input nodes (default = 4)}
+\item{n_hidden_nodes}{number of hidden nodes}
 }
 \description{
 This function selects the xnnet input and hidden nodes

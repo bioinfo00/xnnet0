@@ -11,7 +11,9 @@ assess_xnnet_performance(xnnet, xnnet_predictions, true_labels, metric = "AUC")
 
 \item{xnnet_predictions}{xnnet predictions on a set of samples}
 
-\item{true_labels}{true labels of predicted classs}
+\item{true_labels}{true labels of predicted class}
+
+\item{metric}{metric to evaluate the performance}
 }
 \description{
 Assessing performance of xnnet predictions given labels

@@ -20,11 +20,11 @@
 "annotation_libraries"
 
 
-#' Training/test split
+#' Splitting data in training and test set
 #'
-#' This function splits a dataset and corresponding
-#' labels into a training and test set
-#' @param X transcriptomics data with samples as rows and genes as features
+#' This function splits a dataset X and corresponding
+#' labels y into a training and test set
+#' @param X matrix with samples as rows and genes as features
 #' @param y binary label for each sample in X
 #' @param training_fraction fraction of data for training
 #' @param rnd_seed random seed for reproducible results
@@ -41,20 +41,22 @@ train_test_split = function(X,
                             y,
                             training_fraction = 0.7,
                             rnd_seed = 666) {
-  #splits a labeled dataset (X, y) in training and test set
-  #split_rnd_seed is the random seed for reproducibility
 
   #check if X and y have same size
   testthat::expect_true(nrow(X) == length(y))
 
-  #check that y has two levels (0, 1)
-  class_frequency = table(y)/length(y)
-  y_levels = class_frequency %>% names %>% sort %>% as.numeric
-  testthat::expect_true(sum(y_levels == c(0, 1)) == 2, info = 'y should take on two values: 0, 1')
+  #check if X and y have same size
+  testthat::expect_true(sum(is.na(X)) ==  0,
+                        info = 'NA values should be removed')
 
+  y_levels = y %>% factor %>% levels
+  testthat::expect_true(length(y_levels) == 2 &  y_levels[1] == '0' & y_levels[2] == '1',
+                        info = 'y should take on two values: 0, 1')
+
+  #get frequency of the two classes
+  class_frequency = table(y)/length(y)
   print(paste('####### class 0 frequency: ',  round(class_frequency[1], 2), '#######'))
   print(paste('####### class 1 frequency: ',  round(class_frequency[2], 2), '#######'))
-
   if (min(class_frequency) < 0.1) warning("high class imbalance")
 
   set.seed(rnd_seed)
@@ -132,25 +134,32 @@ build_xnnet = function(X_train, y_train,
   return(xnnet)
 }
 
-#' Limma differential analysis
+#' Differential gene expression
 #'
-#' This function performs differential gene expression with Limma on
-#' the training set
-#' @param X_train data matrix
-#' @param y_train binary labels
+#' This function performs differential gene expression with Limma. To avoid data leackage,
+#' this analysis is applied only to the training data
+#' @param X matrix of expression data in the training set
+#' @param y binary labels for each sample in X_train
 #' @param adj_pval_cutoff fraction of data for training (default = 0.05)
 #' @import limma
 #' @importFrom stats lm mad median model.matrix predict reorder rnorm terms
 
-get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
-  #performs Limma differential expression on labeled training set
+get_limma_results = function(X, y, adj_pval_cutoff = 0.05) {
 
-  exp_design = factor(ifelse(y_train == 0, 'class_neg', 'class_pos'))
+  #check if X and y have same size
+  testthat::expect_true(nrow(X) == length(y))
+
+  #check that y has two levels (0, 1)
+  y_levels = y %>% factor %>% levels
+  testthat::expect_true(length(y_levels) == 2 &  y_levels[1] == '0' & y_levels[2] == '1',
+                        info = 'y should take on two values: 0, 1')
+
+  exp_design = factor(ifelse(y == 0, 'class_neg', 'class_pos'))
   exp_design_matrix = model.matrix( ~ 0 + exp_design)
-  contrast_matrix = limma::makeContrasts(contrasts="exp_designclass_pos - exp_designclass_neg",
+  contrast_matrix = limma::makeContrasts(contrasts = "exp_designclass_pos - exp_designclass_neg",
                                          levels = exp_design_matrix)
 
-  fitTrtMean = limma::lmFit(t(X_train), exp_design_matrix)
+  fitTrtMean = limma::lmFit(t(X), exp_design_matrix)
   fit_contrast = limma::contrasts.fit(fitTrtMean, contrast_matrix)
   efit_contrast = limma::eBayes(fit_contrast)
 
@@ -159,13 +168,6 @@ get_limma_results = function(X_train, y_train, adj_pval_cutoff = 0.05) {
 
   #sort by pi-values
   limma_results = limma_results %>% dplyr::arrange(desc(abs(.data$pi_val)))
-  n_degs = sum(limma_results$adj.P.Val < adj_pval_cutoff)
-  if (n_degs == 0){
-    #warning("no significant genes found at adj pval < 0.05")
-  } else {
-    #print(paste('#######', n_degs, 'DEGS detected at adj pval < 0.05', '#######'))
-
-  }
 
   return(limma_results)
 
@@ -188,20 +190,18 @@ get_GSEA_results = function(limma_results,
                             min_term_size = 10,
                             max_term_size = Inf,
                             rank_metric = 'logFC'){
-  #top_n_gene_sets = length(annotation_library)) {
-  #performs GSEA to identify significant annotation library
-  #annotation_database is a list of gene sets (e.g. Reactome)
-  #top_n_gene_sets is the number of top gene sets retained for downstream analysis
 
-  top_n_gene_sets = length(annotation_library)
+  match.arg(rank_metric, choices = c('logFC', 'pi_val'))
   #check overlap between limma output genes and annotation genes
   measured_genes = row.names(limma_results)
   annotated_genes = unique(unlist(annotation_library))
   overlap = length(intersect(measured_genes, annotated_genes))
+  fraction_of_annotated_genes = overlap/length(measured_genes)
+  testthat::expect_true(fraction_of_annotated_genes > 0.01,
+                        info = 'less than 1% of genes are annotated in library')
 
   switch(rank_metric,
          logFC = {ranks = limma_results$logFC},
-         pval = {ranks = limma_results$P.Value},
          pi_val = {ranks = limma_results$pi_val}
   )
   names(ranks) = row.names(limma_results)
@@ -214,14 +214,7 @@ get_GSEA_results = function(limma_results,
     maxSize = max_term_size
   )
 
-  n_significant_gene_sets = sum(GSEA_results$padj < 0.1)
-
-  #print(paste('#######', n_significant_gene_sets, 'significance gene sets detected at adj pval < 0.1', '#######'))
-  #if (n_significant_gene_sets == 0)
-  # warning(paste('#######', "no significant genes found at adj pval < 0.1"), '#######')
-
-  #print(paste('####### retaining top', top_n_gene_sets, 'gene sets for downstream analysis #######'))
-  GSEA_results = GSEA_results %>%  arrange(desc(abs(.data$NES))) %>% dplyr::slice(1:top_n_gene_sets)
+  GSEA_results = GSEA_results %>%  arrange(desc(abs(.data$NES)))
 
   return(GSEA_results)
 
@@ -229,9 +222,13 @@ get_GSEA_results = function(limma_results,
 
 
 #' Renormalize NES produced by GSEA
-#'
+#' This function renormalizes the NES from different libraries by regressing
+#' out effects related to the specific library and to the size of the gene set.
+#' The renormalized NES can be then compared across libraries and gene sets of
+#' different sizes
 #' @importFrom plyr ldply
-#' @param GSEA_results output of get_GSEA_results
+#' @param GSEA_results list of GSEA output, each element corresponding to the
+#' GSEA output for a specific annotation library
 
 renormalize_NES = function(GSEA_results){
 
@@ -240,7 +237,11 @@ renormalize_NES = function(GSEA_results){
   model = lm(abs(NES) ~ log10(size) + .id, data = all_GSEA_results)
   all_GSEA_results$renormalized_NES = abs(all_GSEA_results$NES) - model$fitted.values
 
-  all_GSEA_results = all_GSEA_results %>% dplyr::filter(.data$renormalized_NES > 0) %>%
+  #remove all annotation terms with a negative renormalized_NES
+  all_GSEA_results = all_GSEA_results %>% dplyr::filter(.data$renormalized_NES > 0)
+
+  #remove all annotation terms with an renormalized_NES below the mean value
+  all_GSEA_results = all_GSEA_results %>% dplyr::filter(.data$renormalized_NES > mean(all_GSEA_results$renormalized_NES)) %>%
     dplyr::arrange(desc(.data$renormalized_NES))
 
   GSEA_results = split(all_GSEA_results, all_GSEA_results$.id)
@@ -261,6 +262,8 @@ get_and_process_GSEA_results = function(annotation_libraries,
     get_GSEA_results(limma_results, x))
 
   GSEA_results = renormalize_NES(GSEA_results)
+
+
   GSEA_results = lapply(GSEA_results, function(x) reduce_GSEA_results(x))
 
   return(GSEA_results)
@@ -277,7 +280,7 @@ build_single_xnnet = function(X_train,
                               n_input_nodes = 5,
                               n_hidden_nodes = 5,
                               n_unassigned = 3,
-                              number = 10,
+                              number = 20,
                               min_decay = 0.1,
                               max_decay = 1){
 
@@ -460,8 +463,8 @@ marginalGain <- function(cur.set.name, cur.res, idsInSet, costs) {
 #' This function selects the xnnet input and hidden nodes
 #' @param reduced_GSEA_results reduced GSEA results
 #' @param limma_results Limma results
-#' @param n_input_nodes number of input nodes (default = 5)
-#' @param n_hidden_nodes number of input nodes (default = 4)
+#' @param n_input_nodes number of input nodes
+#' @param n_hidden_nodes number of hidden nodes
 select_xnnet_nodes = function(reduced_GSEA_results, limma_results,
                               n_input_nodes, n_hidden_nodes){
 
@@ -486,7 +489,8 @@ create_xnnet_binary_matrix = function(annotation_library, selected_xnnet_nodes){
   xnnet_input_nodes = as.character(selected_xnnet_nodes$input_nodes)
   annotation_library = lapply(annotation_library, function(x) intersect(x, xnnet_input_nodes))
 
-  xnnet_binary_matrix = do.call(rbind, lapply(annotation_library, function(x) table(factor(x, levels = unique(xnnet_input_nodes)))))
+  xnnet_binary_matrix = do.call(rbind, lapply(annotation_library,
+                                              function(x) table(factor(x, levels = unique(xnnet_input_nodes)))))
 
   return(data.frame(t(xnnet_binary_matrix)))
 
@@ -540,11 +544,14 @@ generate_mask = function(xnnet_binary_matrix, n_classes = 2) {
 
 }
 
+
+#' @importFrom stats na.omit
 normalize_X = function(X, normalization = 'standard', z_cutoff = 10) {
+
+  match.arg(normalization, choices = c('standard', 'robust'), several.ok = F)
 
   switch(
     normalization,
-
     standard = {
       X = scale(X, center = T)
       X_center = attr(X, "scaled:center")
@@ -558,12 +565,14 @@ normalize_X = function(X, normalization = 'standard', z_cutoff = 10) {
     }
   )
 
-  #threshold z-scores to deal with outliers
-  X[X > z_cutoff] = z_cutoff
-  X[X < -z_cutoff] = -z_cutoff
+  #remove NA's that may be due to constant features
+  if (sum(is.na(X))>0) X = t(na.omit(t(X)))
+
+  #X = threshold_scaled_data(scaled_data = X, z_cutoff = z_cutoff)
 
   return(list(X = X, X_center = X_center, X_scale = X_scale))
 }
+
 
 initialize_weights = function(mask){
 
@@ -639,7 +648,7 @@ cross_validate_xnnet = function(X_train,
 
 
 #' @importFrom  fMultivar mvFit
-augment_data = function(X, y, multiply = 2){
+augment_data = function(X, y, multiply){
 
   if (multiply == 0) return(list(augmented_X = X, augmented_y = y))
 
@@ -662,6 +671,7 @@ augment_data = function(X, y, multiply = 2){
   synthetic_data = rbind(synthetic_data_0, synthetic_data_1)
   colnames(synthetic_data) = colnames(X)
 
+  synthetic_data = threshold_scaled_data(synthetic_data, z_cutoff = 10)
   augmented_X =rbind(X, synthetic_data)
   augmented_y = c(y, rep(0, samples_0*multiply), rep(1, samples_1*multiply))
 
@@ -675,16 +685,16 @@ augment_data = function(X, y, multiply = 2){
 #' Predict sample labels using xnnet
 #'
 #' @param scaled_data scaled data
-#' @param z_threshold threshold on scaled data
+#' @param z_cutoff threshold on scaled data
 #' @export
 
-threshold_scaled_data = function(scaled_data, z_threshold){
-  scaled_data[scaled_data > z_threshold] = z_threshold
-  scaled_data[scaled_data < -z_threshold] = -z_threshold
+threshold_scaled_data = function(scaled_data, z_cutoff){
+  scaled_data[scaled_data > z_cutoff] = z_cutoff
+  scaled_data[scaled_data < -z_cutoff] = -z_cutoff
   return(scaled_data)
 }
 
-preprocess_X_test = function(xnnet_single, X_test, z_threshold){
+preprocess_X_test = function(xnnet_single, X_test, z_cutoff){
 
   xnnet_input_nodes = colnames(xnnet_single$nnetFit$trainingData)
   xnnet_input_nodes = xnnet_input_nodes[-length(xnnet_input_nodes)]
@@ -695,7 +705,7 @@ preprocess_X_test = function(xnnet_single, X_test, z_threshold){
     X_test = X_test[, xnnet_input_nodes]
     X_test = scale(X_test, center = xnnet_single$X_train_center,
                    scale = xnnet_single$X_train_scale)
-    X_test = threshold_scaled_data(X_test, z_threshold) %>% data.frame
+    X_test = threshold_scaled_data(X_test, z_cutoff) %>% data.frame
     X_test$is_single = T
 
     } else {
@@ -703,16 +713,16 @@ preprocess_X_test = function(xnnet_single, X_test, z_threshold){
       X_test = X_test[, xnnet_input_nodes]
       X_test = scale(X_test, center = xnnet_single$X_train_center,
                      scale = xnnet_single$X_train_scale)
-      X_test = threshold_scaled_data(X_test, z_threshold) %>% data.frame
+      X_test = threshold_scaled_data(X_test, z_cutoff) %>% data.frame
       X_test$is_single = F
     }
 
   return(X_test)
   }
 
-xnnet_predict_single = function(xnnet_single, X_test, z_threshold) {
+xnnet_predict_single = function(xnnet_single, X_test, z_cutoff) {
 
-  preprocessed_X_test = preprocess_X_test(xnnet_single, X_test, z_threshold)
+  preprocessed_X_test = preprocess_X_test(xnnet_single, X_test, z_cutoff)
   xnnet_predictions_probs = caret::predict.train(xnnet_single$nnetFit, preprocessed_X_test, type = 'prob')[, 'positive']
   if(preprocessed_X_test$is_single[1] == T) xnnet_predictions_probs = xnnet_predictions_probs[1]
 
@@ -726,11 +736,11 @@ xnnet_predict_single = function(xnnet_single, X_test, z_threshold) {
 #' labels into a training and test set
 #' @param xnnet transcriptomics data with samples as rows and genes as features
 #' @param X_test binary label for each sample in X
-#' @param z_threshold fraction of data for training
+#' @param z_cutoff fraction of data for training
 #' @export
 #' @examples
-xnnet_predict = function(xnnet, X_test, z_threshold = 3){
-  xnnet_predictions = lapply(xnnet, function(x) xnnet_predict_single(x, X_test, z_threshold = z_threshold))
+xnnet_predict = function(xnnet, X_test, z_cutoff = 10){
+  xnnet_predictions = lapply(xnnet, function(x) xnnet_predict_single(x, X_test, z_cutoff = z_cutoff))
   return(xnnet_predictions)
 }
 
@@ -738,7 +748,8 @@ xnnet_predict = function(xnnet, X_test, z_threshold = 3){
 #'
 #' @param xnnet xnnet object
 #' @param xnnet_predictions xnnet predictions on a set of samples
-#' @param true_labels true labels of predicted classs
+#' @param true_labels true labels of predicted class
+#' @param metric metric to evaluate the performance
 #' @import ggplot2
 #' @importFrom pROC auc
 #' @export

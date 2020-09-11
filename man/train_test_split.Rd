@@ -2,12 +2,12 @@
 % Please edit documentation in R/xnnet_functions_v0.1.R
 \name{train_test_split}
 \alias{train_test_split}
-\title{Training/test split}
+\title{Splitting data in training and test set}
 \usage{
 train_test_split(X, y, training_fraction = 0.7, rnd_seed = 666)
 }
 \arguments{
-\item{X}{transcriptomics data with samples as rows and genes as features}
+\item{X}{matrix with samples as rows and genes as features}
 
 \item{y}{binary label for each sample in X}
 
@@ -19,8 +19,8 @@ train_test_split(X, y, training_fraction = 0.7, rnd_seed = 666)
 A list containing \code{(X_train, y_train, X_test, y_test)}.
 }
 \description{
-This function splits a dataset and corresponding
-labels into a training and test set
+This function splits a dataset X and corresponding
+labels y into a training and test set
 }
 \examples{
 data("GSE37250") #load Tubercolosis dataset

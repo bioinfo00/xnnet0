@@ -2,13 +2,22 @@
 % Please edit documentation in R/xnnet_functions_v0.1.R
 \name{renormalize_NES}
 \alias{renormalize_NES}
-\title{Renormalize NES produced by GSEA}
+\title{Renormalize NES produced by GSEA
+This function renormalizes the NES from different libraries by regressing
+out effects related to the specific library and to the size of the gene set.
+The renormalized NES can be then compared across libraries and gene sets of
+different sizes}
 \usage{
 renormalize_NES(GSEA_results)
 }
 \arguments{
-\item{GSEA_results}{output of get_GSEA_results}
+\item{GSEA_results}{list of GSEA output, each element corresponding to the
+GSEA output for a specific annotation library}
 }
 \description{
 Renormalize NES produced by GSEA
+This function renormalizes the NES from different libraries by regressing
+out effects related to the specific library and to the size of the gene set.
+The renormalized NES can be then compared across libraries and gene sets of
+different sizes
 }

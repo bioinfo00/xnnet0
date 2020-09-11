@@ -4,14 +4,14 @@
 \alias{xnnet_predict}
 \title{Generating xnnet predictions on a set of samples}
 \usage{
-xnnet_predict(xnnet, X_test, z_threshold = 3)
+xnnet_predict(xnnet, X_test, z_cutoff = 10)
 }
 \arguments{
 \item{xnnet}{transcriptomics data with samples as rows and genes as features}
 
 \item{X_test}{binary label for each sample in X}
 
-\item{z_threshold}{fraction of data for training}
+\item{z_cutoff}{fraction of data for training}
 }
 \description{
 This function produces class probabilities on a set of samples

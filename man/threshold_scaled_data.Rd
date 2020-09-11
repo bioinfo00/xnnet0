@@ -4,12 +4,12 @@
 \alias{threshold_scaled_data}
 \title{Predict sample labels using xnnet}
 \usage{
-threshold_scaled_data(scaled_data, z_threshold)
+threshold_scaled_data(scaled_data, z_cutoff)
 }
 \arguments{
 \item{scaled_data}{scaled data}
 
-\item{z_threshold}{threshold on scaled data}
+\item{z_cutoff}{threshold on scaled data}
 }
 \description{
 Predict sample labels using xnnet

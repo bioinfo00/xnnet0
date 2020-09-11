@@ -6,17 +6,44 @@
 #                     y_train = GSE37250_split$y_train,
 #                     annotation_libraries = annotation_libraries,
 #                     n_input_nodes = 3, n_hidden_nodes = 3)
+#
+#
+# genes = row.names(xnnet$WikiPathways_2019_Human$xnnet_binary_matrix)
+# y_train = GSE37250_split$y_train
+# X_train = GSE37250_split$X_train[, genes]
+# X_train = normalize_X(X_train)$X
 # #
+# augmented_data = augment_data(X_train, y_train, multiply = 10)
+#
+# gridExtra::grid.arrange(plot_pca(X_train, y_train),
+#                         plot_pca(augmented_data$augmented_X, augmented_data$augmented_y))
+#
+#
+#
+# plot_pca = function(X, y){
+#
+#   pr = prcomp(X)
+#   pca_df = data.frame(pc1 = pr$x[, 1], pc2 = pr$x[, 2], col = y)
+#   ggplot(pca_df, aes(x = pc1, y = pc2, col = factor(col))) + geom_point()
+#
+# }
+#
+#
+#
+#
+#
 # # #predictions on test set
 # xnnet_predictions = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
-#
-# # #assess model performance
-# xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test)
-#
+# #xnnet_predictions = xnnet_predict(xnnet, X_test = GSE37250_split$X_test)
+# #
+# # # # #assess model performance
+# #xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test, metric = 'accuracy')
+# # #
+# # #
 # xnnet_performance = assess_xnnet_performance(xnnet, xnnet_predictions, true_labels = GSE37250_split$y_test, metric = 'accuracy')
-#
-#
-#
+# # #
+# # # #
+# # # #
 # assess_xnnet_performance = function(xnnet, xnnet_predictions, true_labels, metric = 'AUC'){
 #
 #   training_true_labels = xnnet[[1]]$nnetFit$trainingData %>% dplyr::select(.data$.outcome)

@@ -1,9 +1,9 @@
 ## code to prepare `DATASET` dataset goes here
 
 #for the expression dataset
-# GSE37250_processed = readRDS('../../../xnnet/neural_nets/gse37250_processed')
-# X = GSE37250_processed$X #samples x genes
-# y = GSE37250_processed$y$infected #sample labels
+GSE37250_processed = readRDS('../../xnnet/neural_nets/gse37250_processed')
+X = GSE37250_processed$X #samples x genes
+y = GSE37250_processed$y$infected #sample labels
 # sample_idx = sample(1:nrow(X), 50)
 # X = X[sample_idx, ]
 # y = y[sample_idx]

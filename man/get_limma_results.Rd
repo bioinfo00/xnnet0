@@ -2,18 +2,18 @@
 % Please edit documentation in R/xnnet_functions_v0.1.R
 \name{get_limma_results}
 \alias{get_limma_results}
-\title{Limma differential analysis}
+\title{Differential gene expression}
 \usage{
-get_limma_results(X_train, y_train, adj_pval_cutoff = 0.05)
+get_limma_results(X, y, adj_pval_cutoff = 0.05)
 }
 \arguments{
-\item{X_train}{data matrix}
+\item{X}{matrix of expression data in the training set}
 
-\item{y_train}{binary labels}
+\item{y}{binary labels for each sample in X_train}
 
 \item{adj_pval_cutoff}{fraction of data for training (default = 0.05)}
 }
 \description{
-This function performs differential gene expression with Limma on
-the training set
+This function performs differential gene expression with Limma. To avoid data leackage,
+this analysis is applied only to the training data
 }
